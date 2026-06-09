@@ -1,0 +1,1394 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MOQtail Player</title>
+    <style>
+      :root {
+        --bg: #0e0e10;
+        --bg2: #16161a;
+        --bg3: #1e1e24;
+        --bg4: #26262e;
+        --border: #2e2e38;
+        --border2: #3a3a46;
+        --text: #e8e8f0;
+        --text2: #9090a8;
+        --text3: #5a5a70;
+        --accent: #6c63ff;
+        --accent2: #8b83ff;
+        --accentbg: rgba(108, 99, 255, 0.12);
+        --green: #22c55e;
+        --greenbg: rgba(34, 197, 94, 0.1);
+        --red: #ef4444;
+        --redbg: rgba(239, 68, 68, 0.1);
+        --amber: #f59e0b;
+        --amberbg: rgba(245, 158, 11, 0.1);
+        --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+        --sans: "Inter", system-ui, sans-serif;
+        --radius: 8px;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: var(--sans);
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 20px;
+        height: 52px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg2);
+        flex-shrink: 0;
+      }
+      .logo {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+        color: var(--accent2);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .logo-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .topbar-spacer {
+        flex: 1;
+      }
+      .status-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+      }
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--text3);
+      }
+      .status-badge.connected .status-dot {
+        background: var(--green);
+      }
+      .status-badge.connecting .status-dot {
+        background: var(--amber);
+        animation: pulse 1s infinite;
+      }
+      .status-badge.error .status-dot {
+        background: var(--red);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+      .main {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+      .sidebar {
+        width: 300px;
+        flex-shrink: 0;
+        background: var(--bg2);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
+      .sidebar-section {
+        padding: 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .section-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        color: var(--text3);
+        margin-bottom: 12px;
+      }
+      .field {
+        margin-bottom: 10px;
+      }
+      .field label {
+        display: block;
+        font-size: 12px;
+        color: var(--text2);
+        margin-bottom: 4px;
+      }
+      .field input,
+      .field select {
+        width: 100%;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 7px 10px;
+        font-size: 13px;
+        font-family: var(--mono);
+        color: var(--text);
+        outline: none;
+      }
+      .field input:focus,
+      .field select:focus {
+        border-color: var(--accent);
+      }
+      .field select option {
+        background: var(--bg3);
+      }
+      .btn {
+        width: 100%;
+        padding: 8px 14px;
+        border-radius: var(--radius);
+        border: 1px solid var(--border2);
+        background: var(--bg3);
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .btn:hover {
+        background: var(--bg4);
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .btn.primary:hover {
+        background: var(--accent2);
+      }
+      .btn.danger {
+        background: var(--redbg);
+        border-color: var(--red);
+        color: var(--red);
+      }
+      .btn-row {
+        display: flex;
+        gap: 8px;
+      }
+      .btn-row .btn {
+        flex: 1;
+      }
+      .toggle-group {
+        display: flex;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .toggle-btn {
+        flex: 1;
+        padding: 7px 10px;
+        border: none;
+        background: transparent;
+        color: var(--text2);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: var(--sans);
+      }
+      .toggle-btn.active {
+        background: var(--accentbg);
+        color: var(--accent2);
+      }
+      .tracks-list {
+        padding: 8px;
+      }
+      .track-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: var(--radius);
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .track-item:hover {
+        background: var(--bg3);
+      }
+      .track-item.active {
+        background: var(--accentbg);
+        color: var(--accent2);
+      }
+      .track-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: var(--bg3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        flex-shrink: 0;
+        font-family: var(--mono);
+        color: var(--text2);
+      }
+      .track-item.active .track-icon {
+        background: var(--accentbg);
+        color: var(--accent2);
+      }
+      .track-name {
+        font-family: var(--mono);
+        font-size: 12px;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .track-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 500;
+      }
+      .badge-live {
+        background: var(--greenbg);
+        color: var(--green);
+      }
+      .content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .stats-bar {
+        display: flex;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg2);
+        flex-shrink: 0;
+      }
+      .stat-cell {
+        flex: 1;
+        padding: 10px 16px;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .stat-cell:last-child {
+        border-right: none;
+      }
+      .stat-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--text3);
+        font-weight: 600;
+      }
+      .stat-value {
+        font-family: var(--mono);
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--text);
+      }
+      .log-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+        background: var(--bg);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .log-entry {
+        display: flex;
+        gap: 10px;
+        padding: 3px 8px;
+        border-radius: 4px;
+        line-height: 1.6;
+        animation: fadeIn 0.15s ease;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(2px);
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .log-entry:hover {
+        background: var(--bg2);
+      }
+      .log-ts {
+        color: var(--text3);
+        flex-shrink: 0;
+        width: 70px;
+      }
+      .log-level {
+        flex-shrink: 0;
+        width: 52px;
+        font-weight: 500;
+      }
+      .log-msg {
+        color: var(--text);
+        word-break: break-all;
+      }
+      .log-entry.info .log-level {
+        color: var(--accent2);
+      }
+      .log-entry.recv .log-level {
+        color: var(--green);
+      }
+      .log-entry.recv {
+        background: rgba(34, 197, 94, 0.03);
+      }
+      .log-entry.warn .log-level {
+        color: var(--amber);
+      }
+      .log-entry.error .log-level {
+        color: var(--red);
+      }
+      .log-entry.error {
+        background: rgba(239, 68, 68, 0.04);
+      }
+      .log-entry.debug .log-level {
+        color: var(--text3);
+      }
+      .log-entry.debug .log-msg {
+        color: var(--text3);
+      }
+      .log-entry.system .log-level {
+        color: var(--text2);
+      }
+      .bottom-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-top: 1px solid var(--border);
+        background: var(--bg2);
+        flex-shrink: 0;
+      }
+      .bottom-btn {
+        padding: 6px 14px;
+        border-radius: var(--radius);
+        border: 1px solid var(--border2);
+        background: var(--bg3);
+        color: var(--text2);
+        font-size: 12px;
+        font-family: var(--sans);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .bottom-btn:hover {
+        background: var(--bg4);
+        color: var(--text);
+      }
+      .gap-tag {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: var(--amberbg);
+        color: var(--amber);
+        margin-left: 4px;
+      }
+      .ok-tag {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: var(--accentbg);
+        color: var(--accent2);
+        margin-left: 4px;
+      }
+      .sidebar-footer {
+        margin-top: auto;
+        padding: 12px 16px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--text3);
+      }
+      input::placeholder {
+        color: var(--text3);
+      }
+      .log-area::-webkit-scrollbar {
+        width: 6px;
+      }
+      .log-area::-webkit-scrollbar-track {
+        background: var(--bg);
+      }
+      .log-area::-webkit-scrollbar-thumb {
+        background: var(--border2);
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="logo">
+        <div class="logo-dot"></div>
+        MOQtail Player
+      </div>
+      <div
+        style="font-size: 11px; color: var(--text3); font-family: var(--mono)"
+        id="serverLabel"
+      >
+        —
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="status-badge" id="statusBadge">
+        <div class="status-dot"></div>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="sidebar">
+        <div class="sidebar-section">
+          <div class="section-label">Connection</div>
+          <div class="field">
+            <label>Server IP / hostname</label>
+            <input type="text" id="serverUrl" placeholder="192.168.1.10" />
+          </div>
+          <div class="field">
+            <label>Port</label>
+            <input type="text" id="serverPort" value="4433" />
+          </div>
+          <div class="field">
+            <label>WebTransport path</label>
+            <input type="text" id="serverPath" value="/" />
+          </div>
+          <div class="btn-row" style="margin-top: 10px">
+            <button class="btn primary" id="connectBtn" onclick="doConnect()">
+              Connect
+            </button>
+            <button
+              class="btn danger"
+              id="disconnectBtn"
+              onclick="doDisconnect()"
+              style="display: none"
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-label">Track</div>
+          <div class="field">
+            <label>Namespace</label>
+            <input
+              type="text"
+              id="namespace"
+              value="moqtail/demo"
+              placeholder="moqtail/demo"
+            />
+          </div>
+          <div class="field">
+            <label>Track name</label>
+            <input
+              type="text"
+              id="trackName"
+              value="video"
+              placeholder="video"
+            />
+          </div>
+          <div class="field" style="margin-bottom: 10px">
+            <label>Delivery mode</label>
+            <div class="toggle-group">
+              <button
+                class="toggle-btn active"
+                id="modeDatagramBtn"
+                onclick="setMode('datagram')"
+              >
+                Datagram
+              </button>
+              <button
+                class="toggle-btn"
+                id="modeStreamBtn"
+                onclick="setMode('subgroup')"
+              >
+                Subgroup
+              </button>
+            </div>
+          </div>
+          <button
+            class="btn primary"
+            id="subscribeBtn"
+            onclick="doSubscribe()"
+            disabled
+          >
+            Subscribe
+          </button>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-label">Active tracks</div>
+          <div class="tracks-list" id="tracksList">
+            <div style="font-size: 12px; color: var(--text3); padding: 2px">
+              No active subscriptions
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-label">Filter log</div>
+          <div class="toggle-group">
+            <button class="toggle-btn active" onclick="setFilter('all', this)">
+              All
+            </button>
+            <button class="toggle-btn" onclick="setFilter('recv', this)">
+              Data
+            </button>
+            <button class="toggle-btn" onclick="setFilter('error', this)">
+              Errors
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          MOQ draft-16 · WebTransport<br />
+          <span id="urlNote" style="color: var(--text3)"></span>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="stats-bar">
+          <div class="stat-cell">
+            <div class="stat-label">Received</div>
+            <div class="stat-value" id="statReceived">0</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Gaps</div>
+            <div class="stat-value" id="statGaps">0</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Errors</div>
+            <div class="stat-value" id="statErrors">0</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Rate</div>
+            <div class="stat-value" id="statRate">0/s</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Last group</div>
+            <div class="stat-value" id="statGroup">—</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Last object</div>
+            <div class="stat-value" id="statObject">—</div>
+          </div>
+        </div>
+        <div class="log-area" id="logArea"></div>
+        <div class="bottom-bar">
+          <button class="bottom-btn" onclick="clearLog()">Clear</button>
+          <button class="bottom-btn" id="pauseBtn" onclick="togglePause()">
+            Pause
+          </button>
+          <div style="flex: 1"></div>
+          <button class="bottom-btn" onclick="exportLog()">Export</button>
+          <label
+            style="
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              font-size: 12px;
+              color: var(--text2);
+              cursor: pointer;
+            "
+          >
+            <input
+              type="checkbox"
+              id="autoScroll"
+              checked
+              style="accent-color: var(--accent)"
+            />
+            Auto-scroll
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ── State ──────────────────────────────────────────────────────────────────
+      let transport = null;
+      let ctrlWriter = null;
+      let ctrlReader = null;
+      let mode = "datagram";
+      let paused = false;
+      let logFilter = "all";
+      let logEntries = [];
+      let rateCounter = 0;
+      let reqIdCounter = 0;
+      let lastGroup = null,
+        lastObject = null;
+      let stats = { received: 0, gaps: 0, errors: 0 };
+      let activeSubscriptions = [];
+      const MAX_LOG = 3000;
+
+      // Pre-fill from ?url= query param
+      (function () {
+        const p = new URLSearchParams(location.search);
+        if (p.get("url"))
+          document.getElementById("serverUrl").value = p.get("url");
+        document.getElementById("urlNote").textContent =
+          location.origin + location.pathname;
+      })();
+
+      setInterval(() => {
+        document.getElementById("statRate").textContent = rateCounter + "/s";
+        rateCounter = 0;
+      }, 1000);
+
+      // ── MOQ draft-16 wire format ───────────────────────────────────────────────
+      // Version: 0xff000010 (draft-16 = 0xff000000 + 16 = 0xff000010)
+      // Message frame: Type(varint) + Length(16-bit big-endian) + Payload
+      // CLIENT_SETUP = 0x20, SERVER_SETUP = 0x21
+      // SUBSCRIBE = 0x03, SUBSCRIBE_OK = 0x04, SUBSCRIBE_ERROR = 0x05
+      // ANNOUNCE = 0x07, ANNOUNCE_OK = 0x08
+      // MAX_REQUEST_ID = 0x15
+
+      const MSG_CLIENT_SETUP = 0x20;
+      const MSG_SERVER_SETUP = 0x21;
+      const MSG_SUBSCRIBE = 0x03;
+      const MSG_SUBSCRIBE_OK = 0x04;
+      const MSG_SUBSCRIBE_ERR = 0x05;
+      const MSG_ANNOUNCE = 0x07;
+      const MSG_ANNOUNCE_OK = 0x08;
+      const MSG_MAX_REQUEST_ID = 0x15;
+      const MSG_GOAWAY = 0x10;
+
+      const MOQ_VERSION = 0xff000010; //draft-16
+
+      // QUIC varint encode
+      function vi(val) {
+        if (val < 0x40) return new Uint8Array([val]);
+        if (val < 0x4000)
+          return new Uint8Array([0x40 | (val >> 8), val & 0xff]);
+        if (val < 0x40000000)
+          return new Uint8Array([
+            0x80 | (val >> 24),
+            (val >> 16) & 0xff,
+            (val >> 8) & 0xff,
+            val & 0xff,
+          ]);
+        // 8-byte for large values
+        const hi = Math.floor(val / 0x100000000);
+        const lo = val >>> 0;
+        return new Uint8Array([
+          0xc0 | (hi >> 24),
+          (hi >> 16) & 0xff,
+          (hi >> 8) & 0xff,
+          hi & 0xff,
+          (lo >> 24) & 0xff,
+          (lo >> 16) & 0xff,
+          (lo >> 8) & 0xff,
+          lo & 0xff,
+        ]);
+      }
+
+      // Length-prefixed UTF-8 string (varint len + bytes)
+      function lpStr(s) {
+        const b = new TextEncoder().encode(s);
+        return cat(vi(b.length), b);
+      }
+
+      function cat(...arrays) {
+        const total = arrays.reduce((s, a) => s + a.length, 0);
+        const out = new Uint8Array(total);
+        let off = 0;
+        for (const a of arrays) {
+          out.set(a, off);
+          off += a.length;
+        }
+        return out;
+      }
+
+      function len16(n) {
+        return new Uint8Array([(n >> 8) & 0xff, n & 0xff]);
+      }
+
+      // Frame builder: type + 16-bit length + payload
+      function frame(type, payload) {
+        return cat(vi(type), len16(payload.length), payload);
+      }
+
+      // Namespace as MOQ Tuple: varint num_elements, then each element as lpStr
+      function nsTuple(namespace) {
+        const parts = namespace.split("/");
+        let out = vi(parts.length);
+        for (const p of parts) out = cat(out, lpStr(p));
+        return out;
+      }
+
+      // ── Message builders ───────────────────────────────────────────────────────
+      function buildClientSetup() {
+        const payload = cat(vi(1), vi(2), vi(1000000));
+
+        return frame(MSG_CLIENT_SETUP, payload);
+      }
+
+      function buildSubscribe(reqId, namespace, trackName) {
+        const payload = cat(
+          vi(reqId),
+          nsTuple(namespace),
+          lpStr(trackName),
+          vi(0), // param_count = 0
+        );
+
+        return frame(MSG_SUBSCRIBE, payload);
+      }
+
+      function buildMaxRequestId(maxId) {
+        return frame(MSG_MAX_REQUEST_ID, vi(maxId));
+      }
+
+      // ── Stream reader (control stream + uni streams) ───────────────────────────
+      class BufReader {
+        constructor() {
+          this.chunks = [];
+          this.totalBuf = new Uint8Array(0);
+          this.pos = 0;
+          this.waiters = [];
+        }
+
+        feed(chunk) {
+          // Append chunk to buffer
+          const newBuf = new Uint8Array(
+            this.totalBuf.length - this.pos + chunk.length,
+          );
+          newBuf.set(this.totalBuf.slice(this.pos), 0);
+          newBuf.set(chunk, this.totalBuf.length - this.pos);
+          this.totalBuf = newBuf;
+          this.pos = 0;
+          // Wake waiting readers
+          if (this.waiters.length > 0) {
+            const resolve = this.waiters.shift();
+            resolve();
+          }
+        }
+
+        async _ensureBytes(n) {
+          while (this.pos + n > this.totalBuf.length) {
+            await new Promise((r) => this.waiters.push(r));
+          }
+        }
+
+        async readByte() {
+          await this._ensureBytes(1);
+          return this.totalBuf[this.pos++];
+        }
+
+        async readVarint() {
+          const first = await this.readByte();
+          const lenCode = (first >> 6) & 0x3;
+          if (lenCode === 0) return first & 0x3f;
+          const extra = [0, 1, 3, 7][lenCode];
+          let val = first & 0x3f;
+          for (let i = 0; i < extra; i++) {
+            val = val * 256 + (await this.readByte());
+          }
+          return val;
+        }
+
+        async readU16() {
+          const hi = await this.readByte();
+          const lo = await this.readByte();
+          return (hi << 8) | lo;
+        }
+
+        async readBytes(n) {
+          await this._ensureBytes(n);
+          const out = this.totalBuf.slice(this.pos, this.pos + n);
+          this.pos += n;
+          return out;
+        }
+
+        async readString() {
+          const len = await this.readVarint();
+          const bytes = await this.readBytes(len);
+          return new TextDecoder().decode(bytes);
+        }
+      }
+
+      // Pump a QUIC ReadableStream into a BufReader
+      function pumpStream(readable, bufReader, label) {
+        const reader = readable.getReader();
+        (async () => {
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+
+              const bytes = new Uint8Array(value);
+
+              if (label === "control") {
+                log("debug", `CONTROL RX: ${hexDump(bytes)}`);
+              }
+
+              bufReader.feed(bytes);
+            }
+          } catch (e) {
+            log("debug", `Stream pump ended (${label}): ${e.message}`);
+          }
+        })();
+      }
+
+      // ── Connection ─────────────────────────────────────────────────────────────
+      async function doConnect() {
+        const host = document.getElementById("serverUrl").value.trim();
+        const port =
+          document.getElementById("serverPort").value.trim() || "4433";
+        const path = document.getElementById("serverPath").value.trim() || "/";
+        if (!host) {
+          log("error", "Enter server IP/hostname");
+          return;
+        }
+
+        const url = `https://${host}:${port}${path}`;
+        document.getElementById("serverLabel").textContent = url;
+        setStatus("connecting", "Connecting…");
+        log("info", `Connecting to ${url}`);
+        log(
+          "debug",
+          `Using MOQ version 0x${MOQ_VERSION.toString(16)} (draft-16)`,
+        );
+
+        try {
+          transport = new WebTransport(url, {
+            protocols: ["moqt-16"],
+          });
+          await transport.ready;
+          setStatus("connected", "Connected");
+          log("info", "WebTransport ready, opening control stream");
+
+          document.getElementById("connectBtn").style.display = "none";
+          document.getElementById("disconnectBtn").style.display = "";
+          document.getElementById("subscribeBtn").disabled = false;
+
+          // Open bidirectional control stream
+          const bidi = await transport.createBidirectionalStream();
+          ctrlWriter = bidi.writable.getWriter();
+          ctrlReader = new BufReader();
+          pumpStream(bidi.readable, ctrlReader, "control");
+
+          // Send CLIENT_SETUP
+          const setup = buildClientSetup();
+          log("debug", `Sending CLIENT_SETUP: ${hexDump(setup)}`);
+          await ctrlWriter.write(setup);
+
+          log("debug", "Waiting for SERVER_SETUP...");
+
+          // Read SERVER_SETUP
+          await readServerSetup();
+
+          // Start background control message loop
+          controlLoop();
+
+          transport.closed
+            .then(() => {
+              log("info", "Connection closed by server");
+              resetUi();
+            })
+            .catch((e) => {
+              log("warn", `Connection closed: ${e.message}`);
+              resetUi();
+            });
+        } catch (e) {
+          setStatus("error", "Failed");
+          log("error", `Connect failed: ${e.message}`);
+          log(
+            "warn",
+            "Chrome tip: launch with --ignore-certificate-errors-spki-list=<fingerprint> or --ignore-certificate-errors",
+          );
+          transport = null;
+        }
+      }
+
+      async function readKeyValuePair(r) {
+        const key = await r.readVarint();
+
+        if (key % 2 === 0) {
+          const value = await r.readVarint();
+          log("debug", `Param VarInt key=${key} value=${value}`);
+          return { key, value };
+        } else {
+          const len = await r.readVarint();
+          const value = await r.readBytes(len);
+          log("debug", `Param Bytes key=${key} len=${len}`);
+          return { key, value };
+        }
+      }
+
+      async function readServerSetup() {
+        const msgType = await ctrlReader.readVarint();
+        const msgLen = await ctrlReader.readU16();
+
+        if (msgType !== MSG_SERVER_SETUP) {
+          await ctrlReader.readBytes(msgLen);
+          throw new Error(
+            `Expected SERVER_SETUP, got 0x${msgType.toString(16)}`,
+          );
+        }
+
+        const payload = await ctrlReader.readBytes(msgLen);
+        const r = new BufReader();
+        r.feed(payload);
+
+        const version = await r.readVarint();
+        const numParams = await r.readVarint();
+
+        for (let i = 0; i < numParams; i++) {
+          await readKeyValuePair(r);
+        }
+
+        log("info", `SERVER_SETUP: selected version=0x${version.toString(16)}`);
+      }
+
+      async function controlLoop() {
+        try {
+          while (true) {
+            const msgType = await ctrlReader.readVarint();
+            const msgLen = await ctrlReader.readU16();
+            log("debug", `Control msg 0x${msgType.toString(16)} len=${msgLen}`);
+
+            switch (msgType) {
+              case MSG_SUBSCRIBE_OK: {
+                const reqId = await ctrlReader.readVarint(); //subscribe request ID
+                const trackAlias = await ctrlReader.readVarint();
+                const expires = await ctrlReader.readVarint();
+                const groupOrder = await ctrlReader.readVarint();
+                const contentExists = await ctrlReader.readVarint();
+                if (contentExists) {
+                  await ctrlReader.readVarint(); // largest group
+                  await ctrlReader.readVarint(); // largest object
+                }
+                const numParams = await ctrlReader.readVarint();
+                for (let i = 0; i < numParams; i++) {
+                  const k = await ctrlReader.readVarint();
+                  const vl = await ctrlReader.readVarint();
+                  await ctrlReader.readBytes(vl);
+                }
+                log(
+                  "info",
+                  `SUBSCRIBE_OK reqId=${reqId} alias=${trackAlias} contentExists=${contentExists}`,
+                );
+                // Find pending sub and mark as live
+                const sub = activeSubscriptions.find((s) => s.reqId === reqId);
+                if (sub) {
+                  sub.alias = trackAlias;
+                  sub.live = true;
+                  renderTrackList();
+                }
+                break;
+              }
+              case MSG_SUBSCRIBE_ERR: {
+                const reqId = await ctrlReader.readVarint();
+                const code = await ctrlReader.readVarint();
+                const reason = await ctrlReader.readString();
+                const alias = await ctrlReader.readVarint();
+                log(
+                  "error",
+                  `SUBSCRIBE_ERROR reqId=${reqId} code=${code} reason="${reason}"`,
+                );
+                break;
+              }
+              case MSG_ANNOUNCE: {
+                // namespace tuple + params — skip
+                const numParts = await ctrlReader.readVarint();
+                for (let i = 0; i < numParts; i++)
+                  await ctrlReader.readString();
+                const numParams = await ctrlReader.readVarint();
+                for (let i = 0; i < numParams; i++) {
+                  const k = await ctrlReader.readVarint();
+                  const vl = await ctrlReader.readVarint();
+                  await ctrlReader.readBytes(vl);
+                }
+                // send ANNOUNCE_OK with empty namespace (just ack)
+                const ackPayload = vi(0); // 0 namespace elements
+                await ctrlWriter.write(frame(MSG_ANNOUNCE_OK, ackPayload));
+                log("debug", "Handled ANNOUNCE → sent ANNOUNCE_OK");
+                break;
+              }
+              case MSG_MAX_REQUEST_ID: {
+                const maxId = await ctrlReader.readVarint();
+                log("debug", `MAX_REQUEST_ID=${maxId}`);
+                break;
+              }
+              case MSG_GOAWAY: {
+                const newSessionUri = await ctrlReader.readString();
+                log("warn", `GOAWAY new_session_uri="${newSessionUri}"`);
+                break;
+              }
+              default: {
+                // Skip unknown message
+                await ctrlReader.readBytes(msgLen);
+                log(
+                  "debug",
+                  `Unknown control msg 0x${msgType.toString(16)} skipped`,
+                );
+              }
+            }
+          }
+        } catch (e) {
+          log("debug", `Control loop ended: ${e.message}`);
+        }
+      }
+
+      function doDisconnect() {
+        if (transport)
+          transport.close({ closeCode: 0, reason: "User disconnected" });
+        resetUi();
+      }
+
+      function resetUi() {
+        document.getElementById("connectBtn").style.display = "";
+        document.getElementById("disconnectBtn").style.display = "none";
+        document.getElementById("subscribeBtn").disabled = true;
+        setStatus("idle", "Disconnected");
+        transport = null;
+        ctrlWriter = null;
+        ctrlReader = null;
+      }
+
+      // ── Subscribe ──────────────────────────────────────────────────────────────
+      async function doSubscribe() {
+        if (!transport || !ctrlWriter) {
+          log("error", "Not connected");
+          return;
+        }
+        const ns = document.getElementById("namespace").value.trim();
+        const tn = document.getElementById("trackName").value.trim();
+        if (!ns || !tn) {
+          log("error", "Namespace and track name required");
+          return;
+        }
+
+        const reqId = reqIdCounter;
+        reqIdCounter += 2; // clients use even IDs per spec
+
+        const sub = { reqId, ns, tn, alias: null, live: false, mode };
+        activeSubscriptions.push(sub);
+        renderTrackList();
+
+        const msg = buildSubscribe(reqId, ns, tn);
+        log(
+          "info",
+          `SUBSCRIBE reqId=${reqId} ns="${ns}" track="${tn}" mode=${mode}`,
+        );
+        log("debug", `SUBSCRIBE bytes: ${hexDump(msg)}`);
+
+        try {
+          await ctrlWriter.write(msg);
+        } catch (e) {
+          log("error", `Subscribe send failed: ${e.message}`);
+          return;
+        }
+
+        // Start data reception based on mode
+        if (mode === "datagram") {
+          listenDatagrams(reqId);
+        } else {
+          listenStreams(reqId);
+        }
+      }
+
+      // ── Datagram reception ─────────────────────────────────────────────────────
+      // DatagramObject wire (draft-16):
+      // track_alias(vi) group_id(vi) object_id(vi) publisher_priority(vi) extension_headers_length(vi) [ext bytes] payload
+      async function listenDatagrams(forReqId) {
+        log("info", `Listening for datagrams (will filter alias=${forReqId})…`);
+        const dgReader = transport.datagrams.readable.getReader();
+        try {
+          while (true) {
+            const { value, done } = await dgReader.read();
+            if (done) break;
+            try {
+              const bytes = new Uint8Array(value);
+              let off = 0;
+              function rv() {
+                const r = readVarintAt(bytes, off);
+                off += r.len;
+                return r.val;
+              }
+              const trackAlias = rv();
+              const groupId = rv();
+              const objectId = rv();
+              const pubPriority = rv();
+              const extLen = rv();
+              off += extLen; // skip extension headers
+              const payload = bytes.slice(off);
+              processObject(trackAlias, groupId, objectId, payload.length);
+            } catch (e) {
+              stats.errors++;
+              document.getElementById("statErrors").textContent = stats.errors;
+              log("error", `Datagram parse error: ${e.message}`);
+            }
+          }
+        } catch (e) {
+          log("warn", `Datagram reader ended: ${e.message}`);
+        }
+      }
+
+      // ── Subgroup stream reception ──────────────────────────────────────────────
+      // Subgroup stream header (draft-16):
+      // stream_type(vi=0x04) track_alias(vi) group_id(vi) subgroup_id(vi) publisher_priority(vi)
+      // Then objects: object_id(vi) extension_headers_length(vi) [ext bytes] payload_length(vi) payload
+      async function listenStreams(forReqId) {
+        log("info", "Listening for unidirectional streams…");
+        const streamReader =
+          transport.incomingUnidirectionalStreams.getReader();
+        try {
+          while (true) {
+            const { value: stream, done } = await streamReader.read();
+            if (done) break;
+            log("debug", "Accepted uni stream");
+            handleSubgroupStream(stream).catch((e) =>
+              log("debug", `Stream ended: ${e.message}`),
+            );
+          }
+        } catch (e) {
+          log("warn", `Stream accept ended: ${e.message}`);
+        }
+      }
+
+      async function handleSubgroupStream(stream) {
+        const sr = new BufReader();
+        pumpStream(stream, sr, "subgroup");
+
+        const streamType = await sr.readVarint();
+        const trackAlias = await sr.readVarint();
+        const groupId = await sr.readVarint();
+        const subgroupId = await sr.readVarint();
+        const publisherPriority = await sr.readByte(); // важно: u8, не varint
+
+        log(
+          "debug",
+          `Subgroup stream: type=${streamType} alias=${trackAlias} g=${groupId} sub=${subgroupId} prio=${publisherPriority}`,
+        );
+
+        const objectIdDelta = await sr.readVarint();
+        log("debug", `objectIdDelta=${objectIdDelta}`);
+
+        const extLen = await sr.readVarint();
+        log("debug", `extLen=${extLen}`);
+
+        if (extLen > 0) {
+          await sr.readBytes(extLen);
+        }
+
+        const payloadLen = await sr.readVarint();
+        log("debug", `payloadLen=${payloadLen}`);
+
+        const payload = await sr.readBytes(payloadLen);
+
+        processObject(trackAlias, groupId, objectIdDelta, payload.length);
+      }
+
+      // ── Object processing ──────────────────────────────────────────────────────
+      function processObject(trackAlias, groupId, objectId, payloadLen) {
+        rateCounter++;
+        stats.received++;
+
+        let gapFlag = false;
+        if (lastGroup !== null) {
+          if (
+            groupId === lastGroup &&
+            objectId !== lastObject + 1 &&
+            !(objectId === 0 && groupId > lastGroup)
+          ) {
+            stats.gaps++;
+            document.getElementById("statGaps").textContent = stats.gaps;
+            gapFlag = true;
+          } else if (groupId > lastGroup + 1) {
+            stats.gaps++;
+            document.getElementById("statGaps").textContent = stats.gaps;
+            gapFlag = true;
+          }
+        }
+        lastGroup = groupId;
+        lastObject = objectId;
+
+        document.getElementById("statReceived").textContent = stats.received;
+        document.getElementById("statGroup").textContent = groupId;
+        document.getElementById("statObject").textContent = objectId;
+
+        const shouldLog =
+          stats.received <= 10 || stats.received % 100 === 0 || gapFlag;
+        if (shouldLog) {
+          const tag = gapFlag
+            ? '<span class="gap-tag">GAP</span>'
+            : '<span class="ok-tag">OK</span>';
+          log(
+            "recv",
+            `#${stats.received} alias=${trackAlias} g=${groupId} o=${objectId} ${payloadLen}B ${tag}`,
+          );
+        }
+      }
+
+      // ── Varint read from byte array ────────────────────────────────────────────
+      function readVarintAt(buf, off) {
+        const first = buf[off];
+        const lc = (first >> 6) & 0x3;
+        if (lc === 0) return { val: first & 0x3f, len: 1 };
+        const extra = [0, 1, 3, 7][lc];
+        let val = first & 0x3f;
+        for (let i = 1; i <= extra; i++) val = val * 256 + buf[off + i];
+        return { val, len: 1 + extra };
+      }
+
+      // ── UI helpers ─────────────────────────────────────────────────────────────
+      function setMode(m) {
+        mode = m;
+        document
+          .getElementById("modeDatagramBtn")
+          .classList.toggle("active", m === "datagram");
+        document
+          .getElementById("modeStreamBtn")
+          .classList.toggle("active", m === "subgroup");
+      }
+
+      function setStatus(type, text) {
+        document.getElementById("statusBadge").className =
+          "status-badge " + type;
+        document.getElementById("statusText").textContent = text;
+      }
+
+      function renderTrackList() {
+        const list = document.getElementById("tracksList");
+        if (activeSubscriptions.length === 0) {
+          list.innerHTML =
+            '<div style="font-size:12px;color:var(--text3);padding:2px">No active subscriptions</div>';
+          return;
+        }
+        list.innerHTML = "";
+        activeSubscriptions.forEach((s, i) => {
+          const el = document.createElement("div");
+          el.className =
+            "track-item" +
+            (i === activeSubscriptions.length - 1 ? " active" : "");
+          el.innerHTML = `<div class="track-icon">${i + 1}</div>
+      <div class="track-name">${s.tn}</div>
+      <div class="track-badge badge-live">${s.live ? "LIVE" : "…"}</div>`;
+          el.title = `${s.ns}/${s.tn} reqId=${s.reqId} alias=${s.alias}`;
+          el.onclick = () => {
+            document
+              .querySelectorAll(".track-item")
+              .forEach((x) => x.classList.remove("active"));
+            el.classList.add("active");
+            document.getElementById("namespace").value = s.ns;
+            document.getElementById("trackName").value = s.tn;
+          };
+          list.appendChild(el);
+        });
+      }
+
+      function log(level, msg) {
+        const ts = new Date().toTimeString().slice(0, 8);
+        logEntries.push({ level, ts, msg });
+        if (logEntries.length > MAX_LOG) logEntries.shift();
+        if (!paused && (logFilter === "all" || level === logFilter))
+          appendLog({ level, ts, msg });
+      }
+
+      function appendLog(entry) {
+        const area = document.getElementById("logArea");
+        const el = document.createElement("div");
+        el.className = `log-entry ${entry.level}`;
+        const lv = {
+          info: "INFO",
+          recv: "RECV",
+          warn: "WARN",
+          error: "ERR ",
+          debug: "DBG ",
+          system: "SYS ",
+        };
+        el.innerHTML = `<span class="log-ts">${entry.ts}</span><span class="log-level">${lv[entry.level] || entry.level}</span><span class="log-msg">${entry.msg}</span>`;
+        area.appendChild(el);
+        while (area.children.length > MAX_LOG)
+          area.removeChild(area.firstChild);
+        if (document.getElementById("autoScroll").checked)
+          area.scrollTop = area.scrollHeight;
+      }
+
+      function setFilter(f, btn) {
+        logFilter = f;
+        document
+          .querySelectorAll(".toggle-group .toggle-btn")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const area = document.getElementById("logArea");
+        area.innerHTML = "";
+        (f === "all"
+          ? logEntries
+          : logEntries.filter((e) => e.level === f)
+        ).forEach(appendLog);
+        area.scrollTop = area.scrollHeight;
+      }
+
+      function clearLog() {
+        logEntries = [];
+        document.getElementById("logArea").innerHTML = "";
+      }
+
+      function togglePause() {
+        paused = !paused;
+        const btn = document.getElementById("pauseBtn");
+        btn.textContent = paused ? "Resume" : "Pause";
+        btn.style.color = paused ? "var(--amber)" : "";
+      }
+
+      function exportLog() {
+        const text = logEntries
+          .map(
+            (e) =>
+              `${e.ts} [${e.level.toUpperCase()}] ${e.msg.replace(/<[^>]+>/g, "")}`,
+          )
+          .join("\n");
+        const a = Object.assign(document.createElement("a"), {
+          href: URL.createObjectURL(new Blob([text], { type: "text/plain" })),
+          download: `moqtail-log-${Date.now()}.txt`,
+        });
+        a.click();
+      }
+
+      function hexDump(bytes) {
+        return (
+          Array.from(bytes.slice(0, 32))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join(" ") + (bytes.length > 32 ? "…" : "")
+        );
+      }
+
+      // ── Startup messages ───────────────────────────────────────────────────────
+      log("system", "MOQtail Player — MOQ draft-16 (version 0xff000010)");
+      log(
+        "system",
+        "Chrome: launch with --ignore-certificate-errors for self-signed QUIC certs",
+      );
+      log(
+        "system",
+        "Firefox: set network.webtransport.enabled=true and security.tls.enable_0rtt_data=false in about:config",
+      );
+    </script>
+  </body>
+</html>
