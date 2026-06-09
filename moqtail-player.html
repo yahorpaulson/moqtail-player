@@ -645,6 +645,8 @@
       let activeSubscriptions = [];
       const MAX_LOG = 3000;
 
+      let receivedObjects = []; // For gap detection: store received object IDs
+
       // Pre-fill from ?url= query param
       (function () {
         const p = new URLSearchParams(location.search);
@@ -1201,7 +1203,17 @@
 
         const payload = await sr.readBytes(payloadLen);
 
+        handlePayload(trackAlias, groupId, objectIdDelta, payload);
+
         processObject(trackAlias, groupId, objectIdDelta, payload.length);
+      }
+
+      function handlePayload(trackAlias, groupId, objectId, payload) {
+        receivedObjects.push({ groupId, objectId, payload }); // Store received object for gap detection
+        log(
+          "debug",
+          `Stored object for gap detection: g=${groupId} o=${objectId}`,
+        );
       }
 
       // ── Object processing ──────────────────────────────────────────────────────
