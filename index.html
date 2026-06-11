@@ -462,6 +462,7 @@
     </div>
 
     <div class="main">
+        
       <div class="sidebar">
         <div class="sidebar-section">
           <div class="section-label">Connection</div>
@@ -565,13 +566,22 @@
           </div>
         </div>
 
+        
+       
+
         <div class="sidebar-footer">
           MOQ draft-16 · WebTransport<br />
           <span id="urlNote" style="color: var(--text3)"></span>
         </div>
       </div>
 
+
+
       <div class="content">
+
+      <div class="video-preview" id="videoPreview" style="display: flex" >
+          <video id="videoPlayer" controls autoplay style="width: 100%; border-radius: var(--radius)"></video>
+        </div>
         <div class="stats-bar">
           <div class="stat-cell">
             <div class="stat-label">Received</div>
@@ -644,6 +654,13 @@
       let stats = { received: 0, gaps: 0, errors: 0 };
       let activeSubscriptions = [];
       const MAX_LOG = 3000;
+
+      let mediaSource = null;
+      let sourceBuffer = null;
+      let mseReady = false;
+
+
+      let firstGroupId = null; //temp
 
       let receivedObjects = []; // For gap detection: store received object IDs
 
@@ -855,6 +872,46 @@
         })();
       }
 
+      //Video player initialization
+      function initVideoPlayer() {
+        const video = document.getElementById("videoPlayer");
+
+        mediaSource = new MediaSource();
+        video.src = URL.createObjectURL(mediaSource);
+
+        mediaSource.addEventListener("sourceopen", () => {
+            log("info", "MediaSource opened");
+
+          sourceBuffer = mediaSource.addSourceBuffer(
+            'video/mp4; codecs="avc1.64001f, mp4a.40.2"'
+          );
+
+          sourceBuffer.mode = "segments";
+
+          sourceBuffer.addEventListener("updateend", () => {
+            const video = document.getElementById("videoPlayer");
+
+            if (video.buffered.length === 0) {
+              log("debug", "buffered: empty");
+            } else {
+              for (let i = 0; i < video.buffered.length; i++) {
+                log(
+                  "debug",
+                  `buffered[${i}]=${video.buffered.start(i).toFixed(3)}-${video.buffered.end(i).toFixed(3)}`
+                );
+              }
+            }
+
+            appendNextSegment();
+          
+
+            
+          });
+          mseReady = true;
+          appendNextSegment();
+        });
+      }
+
       // ── Connection ─────────────────────────────────────────────────────────────
       async function doConnect() {
         const host = document.getElementById("serverUrl").value.trim();
@@ -886,6 +943,9 @@
           document.getElementById("connectBtn").style.display = "none";
           document.getElementById("disconnectBtn").style.display = "";
           document.getElementById("subscribeBtn").disabled = false;
+
+          //start video player
+          initVideoPlayer();
 
           // Open bidirectional control stream
           const bidi = await transport.createBidirectionalStream();
@@ -1212,8 +1272,41 @@
         receivedObjects.push({ groupId, objectId, payload }); // Store received object for gap detection
         log(
           "debug",
-          `Stored object for gap detection: g=${groupId} o=${objectId}`,
+          `Stored object for gap detection: g=${groupId} o=${objectId} size=${payload.length}`,
         );
+        appendNextSegment();
+      }
+
+      function appendNextSegment() {
+
+        log("debug", "appendNextSegment called");
+        if (!mseReady || !sourceBuffer || sourceBuffer.updating) return;
+        if (receivedObjects.length === 0) return;
+
+        const next = receivedObjects.shift();
+
+        if (firstGroupId === null) {
+          firstGroupId = next.groupId;
+          log("debug", `Set firstGroupId=${firstGroupId}`);
+        }
+        sourceBuffer.timestampOffset = next.groupId - firstGroupId; 
+        try {
+          log(
+            "debug",
+              `Appending g=${next.groupId} queue=${receivedObjects.length}`
+          );
+          sourceBuffer.appendBuffer(next.payload);
+          log(
+            "debug",
+              `Appending g=${next.groupId} queue=${receivedObjects.length}`
+            );
+          log(
+            "debug",
+            `Appended segment to SourceBuffer: g=${next.groupId} o=${next.objectId} size=${next.payload.length}`,
+          );
+        } catch (e) {
+          log("error", `Failed to append segment: ${e.message}`);
+        }
       }
 
       // ── Object processing ──────────────────────────────────────────────────────
