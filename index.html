@@ -1,3 +1,16 @@
+<!--
+  MOQtail Player
+
+  Original project: MOQtail
+
+  Extensions and modifications by Yahor Paulson, 2026:
+  - WebTransport browser subscriber
+  - MediaSource video playback
+  - MP4 segment buffering
+  - Buffer monitoring and playback diagnostics
+  - Adaptive streaming experiments
+-->
+
 <!doctype html>
 <html lang="en">
   <head>
@@ -669,8 +682,6 @@
       let mseReady = false;
 
       let firstGroupId = null; //temp
-
-      let receivedObjects = []; // For gap detection: store received object IDs
 
       let pendingGroups = new Map(); // used for store received groups in the right order
       let nextAppendGroup = null;
