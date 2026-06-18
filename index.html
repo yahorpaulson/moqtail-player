@@ -430,6 +430,17 @@
       input::placeholder {
         color: var(--text3);
       }
+      .log-area {
+        height: 260px;
+        max-height: 260px;
+        overflow-y: auto;
+
+        padding: 8px;
+        background: var(--bg);
+        font-family: var(--mono);
+        font-size: 12px;
+        border-top: 1px solid var(--border);
+      }
       .log-area::-webkit-scrollbar {
         width: 6px;
       }
@@ -462,7 +473,6 @@
     </div>
 
     <div class="main">
-        
       <div class="sidebar">
         <div class="sidebar-section">
           <div class="section-label">Connection</div>
@@ -566,21 +576,20 @@
           </div>
         </div>
 
-        
-       
-
         <div class="sidebar-footer">
           MOQ draft-16 · WebTransport<br />
           <span id="urlNote" style="color: var(--text3)"></span>
         </div>
       </div>
 
-
-
       <div class="content">
-
-      <div class="video-preview" id="videoPreview" style="display: flex" >
-          <video id="videoPlayer" controls autoplay style="width: 100%; border-radius: var(--radius)"></video>
+        <div class="video-preview" id="videoPreview" style="display: flex">
+          <video
+            id="videoPlayer"
+            controls
+            autoplay
+            style="width: 100%; border-radius: var(--radius)"
+          ></video>
         </div>
         <div class="stats-bar">
           <div class="stat-cell">
@@ -656,13 +665,15 @@
       const MAX_LOG = 3000;
 
       let mediaSource = null;
-      let sourceBuffer = null;
+      let sourceBuffer = null; // browser buffer
       let mseReady = false;
-
 
       let firstGroupId = null; //temp
 
       let receivedObjects = []; // For gap detection: store received object IDs
+
+      let pendingGroups = new Map(); // used for store received groups in the right order
+      let nextAppendGroup = null;
 
       // Pre-fill from ?url= query param
       (function () {
@@ -875,15 +886,40 @@
       //Video player initialization
       function initVideoPlayer() {
         const video = document.getElementById("videoPlayer");
+        setInterval(() => {
+          let bufferedSecs = 0;
+
+          if (video.buffered.length > 0) {
+            bufferedSecs =
+              video.buffered.end(video.buffered.length - 1) - video.currentTime;
+          }
+
+          const queueBytes = [...pendingGroups.values()].reduce(
+            (sum, obj) => sum + obj.payload.length,
+            0,
+          );
+
+          document.getElementById("bufferSeconds").textContent =
+            `${Math.max(0, bufferSeconds).toFixed(2)}s`;
+
+          document.getElementById("queueObjects").textContent =
+            pendingGroups.size;
+
+          document.getElementById("queueSize").textContent =
+            `${(queueBytes / 1024 / 1024).toFixed(2)} MB`;
+
+          const tn = document.getElementById("trackName").value.trim();
+          document.getElementById("currentTrack").textContent = tn || "—";
+        }, 500);
 
         mediaSource = new MediaSource();
         video.src = URL.createObjectURL(mediaSource);
 
         mediaSource.addEventListener("sourceopen", () => {
-            log("info", "MediaSource opened");
+          log("info", "MediaSource opened");
 
           sourceBuffer = mediaSource.addSourceBuffer(
-            'video/mp4; codecs="avc1.64001f, mp4a.40.2"'
+            'video/mp4; codecs="avc1.64001f"',
           );
 
           sourceBuffer.mode = "segments";
@@ -897,15 +933,16 @@
               for (let i = 0; i < video.buffered.length; i++) {
                 log(
                   "debug",
-                  `buffered[${i}]=${video.buffered.start(i).toFixed(3)}-${video.buffered.end(i).toFixed(3)}`
+                  `buffered[${i}]=${video.buffered.start(i).toFixed(3)}-${video.buffered.end(i).toFixed(3)}`,
+                );
+                log(
+                  "debug",
+                  `current=${video.currentTime.toFixed(2)} bufferedEnd=${video.buffered.end(0).toFixed(2)}`,
                 );
               }
             }
 
             appendNextSegment();
-          
-
-            
           });
           mseReady = true;
           appendNextSegment();
@@ -1269,41 +1306,51 @@
       }
 
       function handlePayload(trackAlias, groupId, objectId, payload) {
-        receivedObjects.push({ groupId, objectId, payload }); // Store received object for gap detection
+        pendingGroups.set(groupId, { groupId, objectId, payload });
+
         log(
           "debug",
-          `Stored object for gap detection: g=${groupId} o=${objectId} size=${payload.length}`,
+          `Stored pending g=${groupId} pending=${pendingGroups.size}`,
         );
+
+        if (nextAppendGroup === null) {
+          nextAppendGroup = groupId;
+          firstGroupId = groupId;
+          log("debug", `Start append order from g=${groupId}`);
+        }
+
         appendNextSegment();
       }
 
       function appendNextSegment() {
-
-        log("debug", "appendNextSegment called");
         if (!mseReady || !sourceBuffer || sourceBuffer.updating) return;
-        if (receivedObjects.length === 0) return;
+        if (!mediaSource || mediaSource.readyState !== "open") return;
+        if (nextAppendGroup === null) return;
 
-        const next = receivedObjects.shift();
+        const next = pendingGroups.get(nextAppendGroup);
 
-        if (firstGroupId === null) {
-          firstGroupId = next.groupId;
-          log("debug", `Set firstGroupId=${firstGroupId}`);
+        if (!next) {
+          log("debug", `Waiting for g=${nextAppendGroup}`);
+          return;
         }
-        sourceBuffer.timestampOffset = next.groupId - firstGroupId; 
+
+        pendingGroups.delete(nextAppendGroup);
+
         try {
           log(
             "debug",
-              `Appending g=${next.groupId} queue=${receivedObjects.length}`
+            `Appending g=${next.groupId} pending=${pendingGroups.size}`,
           );
+
+          sourceBuffer.timestampOffset = next.groupId - firstGroupId;
           sourceBuffer.appendBuffer(next.payload);
-          log(
-            "debug",
-              `Appending g=${next.groupId} queue=${receivedObjects.length}`
-            );
+
           log(
             "debug",
             `Appended segment to SourceBuffer: g=${next.groupId} o=${next.objectId} size=${next.payload.length}`,
           );
+
+          nextAppendGroup++;
         } catch (e) {
           log("error", `Failed to append segment: ${e.message}`);
         }
