@@ -1,5 +1,19 @@
 import { log, setFilter, clearLog, togglePause, exportLog } from "./logger.js";
 import { BufReader } from "./BufReader.js";
+import {
+  MOQ_VERSION,
+  MSG_SUBSCRIBE,
+  MSG_MAX_REQUEST_ID,
+  MSG_SERVER_SETUP,
+  MSG_SUBSCRIBE_OK,
+  MSG_SUBSCRIBE_ERR,
+  MSG_ANNOUNCE,
+  MSG_GOAWAY,
+  buildClientSetup,
+  buildSubscribe,
+  buildAnnounceOk,
+  vi,
+} from "./moq.js";
 
 // ── State ──────────────────────────────────────────────────────────────────
 let transport = null;
@@ -37,26 +51,6 @@ setInterval(() => {
   rateCounter = 0;
 }, 1000);
 
-// ── MOQ draft-16 wire format ───────────────────────────────────────────────
-// Version: 0xff000010 (draft-16 = 0xff000000 + 16 = 0xff000010)
-// Message frame: Type(varint) + Length(16-bit big-endian) + Payload
-// CLIENT_SETUP = 0x20, SERVER_SETUP = 0x21
-// SUBSCRIBE = 0x03, SUBSCRIBE_OK = 0x04, SUBSCRIBE_ERROR = 0x05
-// ANNOUNCE = 0x07, ANNOUNCE_OK = 0x08
-// MAX_REQUEST_ID = 0x15
-
-const MSG_CLIENT_SETUP = 0x20;
-const MSG_SERVER_SETUP = 0x21;
-const MSG_SUBSCRIBE = 0x03;
-const MSG_SUBSCRIBE_OK = 0x04;
-const MSG_SUBSCRIBE_ERR = 0x05;
-const MSG_ANNOUNCE = 0x07;
-const MSG_ANNOUNCE_OK = 0x08;
-const MSG_MAX_REQUEST_ID = 0x15;
-const MSG_GOAWAY = 0x10;
-
-const MOQ_VERSION = 0xff000010; //draft-16
-
 document.getElementById("modeDatagramBtn").onclick = () => setMode("datagram");
 document.getElementById("modeStreamBtn").onclick = () => setMode("subgroup");
 document.getElementById("connectBtn").onclick = () => doConnect();
@@ -65,88 +59,6 @@ document.getElementById("subscribeBtn").onclick = () => doSubscribe();
 document.getElementById("clearLogBtn").onclick = () => clearLog();
 document.getElementById("pauseBtn").onclick = () => togglePause();
 document.getElementById("exportLogBtn").onclick = () => exportLog();
-
-// QUIC varint encode
-function vi(val) {
-  if (val < 0x40) return new Uint8Array([val]);
-  if (val < 0x4000) return new Uint8Array([0x40 | (val >> 8), val & 0xff]);
-  if (val < 0x40000000)
-    return new Uint8Array([
-      0x80 | (val >> 24),
-      (val >> 16) & 0xff,
-      (val >> 8) & 0xff,
-      val & 0xff,
-    ]);
-  // 8-byte for large values
-  const hi = Math.floor(val / 0x100000000);
-  const lo = val >>> 0;
-  return new Uint8Array([
-    0xc0 | (hi >> 24),
-    (hi >> 16) & 0xff,
-    (hi >> 8) & 0xff,
-    hi & 0xff,
-    (lo >> 24) & 0xff,
-    (lo >> 16) & 0xff,
-    (lo >> 8) & 0xff,
-    lo & 0xff,
-  ]);
-}
-
-// Length-prefixed UTF-8 string (varint len + bytes)
-function lpStr(s) {
-  const b = new TextEncoder().encode(s);
-  return cat(vi(b.length), b);
-}
-
-function cat(...arrays) {
-  const total = arrays.reduce((s, a) => s + a.length, 0);
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const a of arrays) {
-    out.set(a, off);
-    off += a.length;
-  }
-  return out;
-}
-
-function len16(n) {
-  return new Uint8Array([(n >> 8) & 0xff, n & 0xff]);
-}
-
-// Frame builder: type + 16-bit length + payload
-function frame(type, payload) {
-  return cat(vi(type), len16(payload.length), payload);
-}
-
-// Namespace as MOQ Tuple: varint num_elements, then each element as lpStr
-function nsTuple(namespace) {
-  const parts = namespace.split("/");
-  let out = vi(parts.length);
-  for (const p of parts) out = cat(out, lpStr(p));
-  return out;
-}
-
-// ── Message builders ───────────────────────────────────────────────────────
-function buildClientSetup() {
-  const payload = cat(vi(1), vi(2), vi(1000000));
-
-  return frame(MSG_CLIENT_SETUP, payload);
-}
-
-function buildSubscribe(reqId, namespace, trackName) {
-  const payload = cat(
-    vi(reqId),
-    nsTuple(namespace),
-    lpStr(trackName),
-    vi(0), // param_count = 0
-  );
-
-  return frame(MSG_SUBSCRIBE, payload);
-}
-
-function buildMaxRequestId(maxId) {
-  return frame(MSG_MAX_REQUEST_ID, vi(maxId));
-}
 
 // Pump a QUIC ReadableStream into a BufReader
 function pumpStream(readable, bufReader, label) {
@@ -188,7 +100,7 @@ function initVideoPlayer() {
     );
 
     document.getElementById("bufferSeconds").textContent =
-      `${Math.max(0, bufferedSeconds).toFixed(2)}s`;
+      `${Math.max(0, bufferedSecs).toFixed(2)}s`;
 
     document.getElementById("queueObjects").textContent = pendingGroups.size;
 
@@ -399,8 +311,7 @@ async function controlLoop() {
             await ctrlReader.readBytes(vl);
           }
           // send ANNOUNCE_OK with empty namespace (just ack)
-          const ackPayload = vi(0); // 0 namespace elements
-          await ctrlWriter.write(frame(MSG_ANNOUNCE_OK, ackPayload));
+          await ctrlWriter.write(buildAnnounceOk());
           log("debug", "Handled ANNOUNCE → sent ANNOUNCE_OK");
           break;
         }
