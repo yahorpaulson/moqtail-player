@@ -1,10 +1,8 @@
 // ── MOQ draft-16 wire format ───────────────────────────────────────────────
 // Version: 0xff000010 (draft-16 = 0xff000000 + 16 = 0xff000010)
 // Message frame: Type(varint) + Length(16-bit big-endian) + Payload
-// CLIENT_SETUP = 0x20, SERVER_SETUP = 0x21
-// SUBSCRIBE = 0x03, SUBSCRIBE_OK = 0x04, SUBSCRIBE_ERROR = 0x05
-// ANNOUNCE = 0x07, ANNOUNCE_OK = 0x08
-// MAX_REQUEST_ID = 0x15
+
+//values are defined in relay libs control constant.rs
 
 export const MSG_CLIENT_SETUP = 0x20;
 export const MSG_SERVER_SETUP = 0x21;
@@ -15,6 +13,7 @@ export const MSG_ANNOUNCE = 0x07;
 export const MSG_ANNOUNCE_OK = 0x08;
 export const MSG_MAX_REQUEST_ID = 0x15;
 export const MSG_GOAWAY = 0x10;
+export const MSG_UNSUBSCRIBE = 0x0a;
 
 export const MOQ_VERSION = 0xff000010;
 
@@ -84,4 +83,8 @@ export function buildSubscribe(reqId, namespace, trackName) {
 
 export function buildAnnounceOk() {
   return frame(MSG_ANNOUNCE_OK, vi(0));
+}
+
+export function buildUnsubscribe(reqId) {
+  return frame(MSG_UNSUBSCRIBE, vi(reqId));
 }

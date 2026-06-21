@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MOQtail Player</title>
-    <link rel="stylesheet" href="style.css" />
     <script type="module" src="js/player.js"></script>
     <link rel="stylesheet" href="css/styles.css" />
   </head>
@@ -33,7 +32,7 @@
           <div class="section-label">Connection</div>
           <div class="field">
             <label>Server IP / hostname</label>
-            <input type="text" id="serverUrl" placeholder="192.168.1.10" />
+            <input type="text" id="serverUrl" value="192.168.56.103" />
           </div>
           <div class="field">
             <label>Port</label>
@@ -58,8 +57,8 @@
             <input
               type="text"
               id="namespace"
-              value="moqtail/demo"
-              placeholder="moqtail/demo"
+              value="moqtail"
+              placeholder="moqtail"
             />
           </div>
           <div class="field">
@@ -67,35 +66,20 @@
             <input
               type="text"
               id="trackName"
-              value="video"
+              value="480p"
               placeholder="video"
             />
           </div>
           <div class="field" style="margin-bottom: 10px">
             <label>Delivery mode</label>
             <div class="toggle-group">
-              <button
-                class="toggle-btn active"
-                id="modeDatagramBtn"
-                onclick="setMode('datagram')"
-              >
-                Datagram
-              </button>
-              <button
-                class="toggle-btn"
-                id="modeStreamBtn"
-                onclick="setMode('subgroup')"
-              >
+              <button class="toggle-btn" id="modeDatagramBtn">Datagram</button>
+              <button class="toggle-btn active" id="modeStreamBtn">
                 Subgroup
               </button>
             </div>
           </div>
-          <button
-            class="btn primary"
-            id="subscribeBtn"
-            onclick="doSubscribe()"
-            disabled
-          >
+          <button class="btn primary" id="subscribeBtn" disabled>
             Subscribe
           </button>
         </div>
