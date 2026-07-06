@@ -54,8 +54,15 @@ export class BufReader {
 
   async readBytes(n) {
     await this._ensureBytes(n);
+
     const out = this.totalBuf.slice(this.pos, this.pos + n);
     this.pos += n;
+
+    if (this.pos > 1024 * 1024) {
+      this.totalBuf = this.totalBuf.slice(this.pos);
+      this.pos = 0;
+    }
+
     return out;
   }
 

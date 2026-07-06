@@ -66,7 +66,7 @@
             <input
               type="text"
               id="trackName"
-              value="480p"
+              value="undefined"
               placeholder="video"
             />
           </div>
@@ -115,14 +115,53 @@
       </div>
 
       <div class="content">
-        <div class="video-preview" id="videoPreview" style="display: flex">
+        <div
+          class="video-preview"
+          id="videoPreview"
+          style="display: flex; position: relative"
+        >
           <video
             id="videoPlayer"
             controls
             autoplay
             style="width: 100%; border-radius: var(--radius)"
           ></video>
+
+          <div id="videoTrackNameOverlay"></div>
+
+          <div id="videoStatsOverlay">
+            <div>Latency: <span id="latencyOverlay">—</span></div>
+            <div>
+              End to end latency: <span id="endToEndLatencyOverlay">—</span>
+            </div>
+            <div>Throughput: <span id="throughputOverlay">—</span></div>
+          </div>
         </div>
+        <div class="buffer-bar">
+          <label for="bufferSizeInput"> Buffer size: </label>
+
+          <input
+            id="bufferSizeInput"
+            type="range"
+            min="1"
+            max="30"
+            step="1"
+            value="5"
+          />
+
+          <label for="delayInput"> Playback delay: </label>
+          <input
+            id="delayInput"
+            type="range"
+            min="0"
+            max="10000"
+            step="500"
+            value="0"
+          />
+          <span id="delayValue">0</span>
+        </div>
+
+        <span id="bufferSizeValue">bufferSize</span>
         <div class="stats-bar">
           <div class="stat-cell">
             <div class="stat-label">Received</div>

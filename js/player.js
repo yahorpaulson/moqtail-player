@@ -15,10 +15,13 @@ import {
 } from "./moq.js";
 
 import {
-  initVideoPlayer,
+  initVideoBuffer,
+  setMaxBufferSeconds,
+  setLiveDelaySeconds,
   handlePayload,
   setActiveAlias,
   waitForFirstSegment,
+  applyLiveDelayNow,
 } from "./videoBuffer.js";
 
 let transport = null;
@@ -41,6 +44,60 @@ let streamsListenerStarted = false;
 let datagramListenerStarted = false;
 
 let lastSeenByAlias = new Map();
+
+window.addEventListener("DOMContentLoaded", () => {
+  initPlayer();
+  initBufferControls();
+});
+
+function initPlayer() {
+  const video = document.getElementById("videoPlayer");
+
+  const mediaSource = new MediaSource();
+  video.src = URL.createObjectURL(mediaSource);
+
+  mediaSource.addEventListener("sourceopen", () => {
+    const sourceBuffer = mediaSource.addSourceBuffer(
+      'video/mp4; codecs="avc1.64001f"',
+    );
+
+    sourceBuffer.mode = "segments";
+
+    initVideoBuffer({
+      video,
+      mediaSource,
+      sourceBuffer,
+    });
+  });
+}
+
+function initBufferControls() {
+  const bufferInput = document.getElementById("bufferSizeInput");
+  const delayInput = document.getElementById("delayInput");
+  const bufferValue = document.getElementById("bufferSizeValue");
+
+  if (!bufferInput || !bufferValue) return;
+
+  const applyBufferSize = () => {
+    const value = Number(bufferInput.value);
+
+    setMaxBufferSeconds(value);
+    bufferValue.textContent = `${value} sec`;
+
+    console.log("BUFFER CHANGED:", value);
+  };
+
+  const applyDelay = () => {
+    const value = Number(delayInput.value);
+
+    setPlaybackDelay(value);
+  };
+
+  applyBufferSize();
+  applyDelay();
+  bufferInput.addEventListener("input", applyBufferSize);
+  delayInput.addEventListener("input", applyDelay);
+}
 
 (function () {
   const p = new URLSearchParams(location.search);
@@ -84,6 +141,8 @@ document.getElementById("subscribeBtn").onclick = async () => {
 
       activeSubscription = { ...result, ns, tn, live: true, mode };
       renderTrackList();
+
+      updateVideoOverlay(tn);
     } catch (e) {
       console.error("doSubscribe failed", e);
       subscribed = false;
@@ -155,8 +214,6 @@ async function doConnect() {
     document.getElementById("disconnectBtn").style.display = "";
     document.getElementById("subscribeBtn").disabled = false;
 
-    initVideoPlayer();
-
     const bidi = await transport.createBidirectionalStream();
 
     ctrlWriter = bidi.writable.getWriter();
@@ -190,6 +247,31 @@ async function doConnect() {
       "Chrome tip: launch with --ignore-certificate-errors-spki-list=<fingerprint> or --ignore-certificate-errors",
     );
     transport = null;
+  }
+}
+
+function updateThroughputOverlay(mbps) {
+  const el = document.getElementById("throughputOverlay");
+  if (!el) return;
+
+  el.textContent = `${mbps.toFixed(2)} Mbps`;
+}
+
+function updateVideoOverlay(trackName) {
+  const overlay = document.getElementById("videoTrackNameOverlay");
+  if (!overlay) return;
+
+  overlay.textContent = trackName;
+}
+
+function setPlaybackDelay(delaySeconds) {
+  setLiveDelaySeconds(delaySeconds);
+
+  applyLiveDelayNow();
+
+  const delayOverlay = document.getElementById("delayOverlay");
+  if (delayOverlay) {
+    delayOverlay.textContent = `${delaySeconds} sec`;
   }
 }
 
@@ -425,6 +507,11 @@ async function doSubscribe(ns, tn, makeActive = true) {
 
   const alias = await waitForSubscribeOk(reqId);
 
+  if (alias === null) {
+    log("error", "Subscribe failed");
+    return null;
+  }
+
   log("info", `SUBSCRIBE_OK alias=${alias}`);
 
   if (makeActive) {
@@ -475,6 +562,7 @@ async function switchTrack(ns, tn) {
   log("info", `switch to alias=${alias}`);
 
   setActiveAlias(alias);
+  updateVideoOverlay(tn);
 
   activeSubscription = {
     reqId,
@@ -588,10 +676,44 @@ async function handleSubgroupStream(stream) {
   const payloadLen = await sr.readVarint();
   log("debug", `payloadLen=${payloadLen}`);
 
+  const recvStart = performance.now();
+
   const payload = await sr.readBytes(payloadLen);
 
-  handlePayload(trackAlias, groupId, objectIdDelta, payload);
+  const publishTimestamp = readU64BE(payload.slice(0, 8));
+  const videoPayload = payload.slice(8);
+
+  handlePayload(
+    trackAlias,
+    groupId,
+    objectIdDelta,
+    videoPayload,
+    publishTimestamp,
+  );
+
+  const recvEnd = performance.now();
+
+  const receiveTimeMs = recvEnd - recvStart;
+
+  const throughputMbps = (payloadLen * 8) / receiveTimeMs / 1000;
+
+  const end = performance.now();
+
+  log(
+    "info",
+    `Transfer g=${groupId} size=${(payloadLen / 1024 / 1024).toFixed(2)}MB ` +
+      `time=${receiveTimeMs.toFixed(0)}ms ` +
+      `throughput=${throughputMbps.toFixed(2)}Mbps`,
+  );
+
+  updateThroughputOverlay(throughputMbps);
+
   processObject(trackAlias, groupId, objectIdDelta, payload.length);
+}
+
+function readU64BE(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return Number(view.getBigUint64(0, false));
 }
 
 function processObject(trackAlias, groupId, objectId, payloadLen) {
