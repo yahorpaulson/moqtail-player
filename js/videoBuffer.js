@@ -1,4 +1,10 @@
 import { log } from "./logger.js";
+import {
+  addLatencySample,
+  addBufferSample,
+  startStall,
+  endStall,
+} from "./statsCollector.js";
 
 let video = null;
 let mediaSource = null;
@@ -35,6 +41,8 @@ const MAX_PENDING_GROUPS = 3;
 
 let latencyTimer = null;
 
+let waitingTimer = null;
+
 export function initVideoBuffer(ctx) {
   video = ctx.video;
   mediaSource = ctx.mediaSource;
@@ -54,7 +62,7 @@ export function initVideoBuffer(ctx) {
     }
 
     // keep disabled while debugging 1080p stalls
-    // trimOldBuffer();
+    //trimOldBuffer();
 
     logBufferedRangesDetailed();
 
@@ -63,24 +71,31 @@ export function initVideoBuffer(ctx) {
   });
 
   video.addEventListener("waiting", () => {
-    log("warn", `VIDEO waiting currentTime=${video.currentTime.toFixed(3)}`);
+    if (!playbackStarted) return;
+    if (video.paused || video.ended || video.seeking) return;
+    if (waitingTimer !== null) return;
 
-    for (let i = 0; i < video.buffered.length; i++) {
-      log(
-        "warn",
-        `WAIT RANGE ${i}: ${video.buffered.start(i).toFixed(3)}-${video.buffered
-          .end(i)
-          .toFixed(3)}`,
-      );
+    waitingTimer = setTimeout(() => {
+      startStall();
+      waitingTimer = null;
+
+      log("warn", `REAL STALL currentTime=${video.currentTime.toFixed(3)}`);
+    }, 250); // wait 250ms before considering it a stall
+  });
+
+  video.addEventListener("playing", () => {
+    if (waitingTimer !== null) {
+      clearTimeout(waitingTimer);
+      waitingTimer = null;
     }
+
+    endStall();
+
+    log("info", `VIDEO playing currentTime=${video.currentTime.toFixed(3)}`);
   });
 
   video.addEventListener("stalled", () => {
     log("warn", `VIDEO stalled currentTime=${video.currentTime.toFixed(3)}`);
-  });
-
-  video.addEventListener("playing", () => {
-    log("info", `VIDEO playing currentTime=${video.currentTime.toFixed(3)}`);
   });
 
   if (latencyTimer === null) {
@@ -106,6 +121,7 @@ export function applyLiveDelayNow() {
 
   video.currentTime = Math.max(start, end - LIVE_DELAY_SECONDS);
 }
+
 function maybeStartPlayback() {
   if (playbackStarted) return;
   if (!video) return;
@@ -180,22 +196,48 @@ function trimOldBuffer() {
 
   sourceBuffer.remove(bufferStart, removeEnd);
 }
-
 function checkPlaybackLatency() {
   if (!video) return;
 
-  for (const [groupId, marker] of playbackMarkers) {
-    if (video.currentTime >= marker.offset) {
-      const playerLatency = Date.now() - marker.receiveTimestamp;
-      const endToEndLatency = Date.now() - marker.publishTimestamp;
+  let bufferSeconds = 0;
 
-      updateLatencyOverlay(playerLatency);
-      updateEndToEndLatencyOverlay(endToEndLatency);
+  if (video.buffered.length > 0) {
+    const bufferedEnd = video.buffered.end(video.buffered.length - 1);
 
-      const now = Date.now();
+    bufferSeconds = Math.max(0, bufferedEnd - video.currentTime);
+  }
 
-      playbackMarkers.delete(groupId);
+  addBufferSample(bufferSeconds);
+
+  for (const [markerKey, marker] of playbackMarkers) {
+    if (video.currentTime < marker.offset) {
+      continue;
     }
+
+    const now = Date.now();
+
+    const playerLatency = now - marker.receiveTimestamp;
+
+    const endToEndLatency = now - marker.publishTimestamp;
+
+    updateLatencyOverlay(playerLatency);
+    updateEndToEndLatencyOverlay(endToEndLatency);
+
+    addLatencySample({
+      e2eLatencyMs: endToEndLatency,
+      playerLatencyMs: playerLatency,
+    });
+
+    log(
+      "info",
+      `METRIC alias=${marker.trackAlias} ` +
+        `group=${marker.groupId} ` +
+        `player=${playerLatency}ms ` +
+        `e2e=${endToEndLatency}ms ` +
+        `buffer=${bufferSeconds.toFixed(3)}s`,
+    );
+
+    playbackMarkers.delete(markerKey);
   }
 }
 
@@ -225,9 +267,14 @@ function updateThroughputOverlay(mbps) {
   if (!el) {
     return;
   }
-  el.textContent = trackName;
-}
 
+  if (!Number.isFinite(mbps)) {
+    el.textContent = "—";
+    return;
+  }
+
+  el.textContent = `${mbps.toFixed(2)} Mbps`;
+}
 export function handlePayload(
   trackAlias,
   groupId,
@@ -337,9 +384,13 @@ export function appendNextSegment() {
     const segmentIndex = next.groupId - firstGroupId;
     const offset = timelineOffset + segmentIndex;
 
+    const markerKey = `${next.trackAlias}:${next.groupId}`;
+
     sourceBuffer.timestampOffset = offset;
 
-    playbackMarkers.set(next.groupId, {
+    playbackMarkers.set(markerKey, {
+      groupId: next.groupId,
+      trackAlias: next.trackAlias,
       offset: Math.max(0, offset),
       publishTimestamp: next.publishTimestamp,
       receiveTimestamp: next.receiveTimestamp,
@@ -471,8 +522,6 @@ export function setActiveAlias(alias) {
       nextAppendGroup = null;
       firstGroupId = null;
     }
-
-    playbackStarted = false;
   }
 
   missingGroupSince = null;

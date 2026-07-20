@@ -24,6 +24,17 @@ import {
   applyLiveDelayNow,
 } from "./videoBuffer.js";
 
+import {
+  startExperiment,
+  stopExperiment,
+  resetExperimentStats,
+  exportExperimentCsv,
+  setExperimentQuality,
+  setUploadLimitMbps,
+  getExperimentData,
+  getRollingAverageLatency,
+} from "./statsCollector.js";
+
 let transport = null;
 let ctrlWriter = null;
 let ctrlReader = null;
@@ -48,6 +59,7 @@ let lastSeenByAlias = new Map();
 window.addEventListener("DOMContentLoaded", () => {
   initPlayer();
   initBufferControls();
+  initMeasurementControls();
 });
 
 function initPlayer() {
@@ -71,32 +83,73 @@ function initPlayer() {
   });
 }
 
+function initMeasurementControls() {
+  const startButton = document.getElementById("startMeasurementBtn");
+  const stopButton = document.getElementById("stopMeasurementBtn");
+  const resetButton = document.getElementById("resetMeasurementBtn");
+  const exportButton = document.getElementById("exportMeasurementBtn");
+  const printButton = document.getElementById("printMeasurementBtn");
+
+  console.log("Measurement buttons:", {
+    startButton,
+    stopButton,
+    resetButton,
+    exportButton,
+    printButton,
+  });
+
+  startButton?.addEventListener("click", () => {
+    console.log("START MEASUREMENT CLICK");
+    startMeasurement();
+  });
+
+  stopButton?.addEventListener("click", () => {
+    console.log("STOP MEASUREMENT CLICK");
+    stopMeasurement();
+  });
+
+  resetButton?.addEventListener("click", resetMeasurement);
+  exportButton?.addEventListener("click", exportMeasurement);
+  printButton?.addEventListener("click", printMeasurementSummary);
+}
+
 function initBufferControls() {
   const bufferInput = document.getElementById("bufferSizeInput");
   const delayInput = document.getElementById("delayInput");
   const bufferValue = document.getElementById("bufferSizeValue");
 
-  if (!bufferInput || !bufferValue) return;
+  if (bufferInput && bufferValue) {
+    const applyBufferSize = () => {
+      const value = Number(bufferInput.value);
 
-  const applyBufferSize = () => {
-    const value = Number(bufferInput.value);
+      if (!Number.isFinite(value)) {
+        return;
+      }
 
-    setMaxBufferSeconds(value);
-    bufferValue.textContent = `${value} sec`;
+      setMaxBufferSeconds(value);
+      bufferValue.textContent = `${value} sec`;
 
-    console.log("BUFFER CHANGED:", value);
-  };
+      console.log("BUFFER CHANGED:", value);
+    };
 
-  const applyDelay = () => {
-    const value = Number(delayInput.value);
+    applyBufferSize();
+    bufferInput.addEventListener("input", applyBufferSize);
+  }
 
-    setPlaybackDelay(value);
-  };
+  if (delayInput) {
+    const applyDelay = () => {
+      const value = Number(delayInput.value);
 
-  applyBufferSize();
-  applyDelay();
-  bufferInput.addEventListener("input", applyBufferSize);
-  delayInput.addEventListener("input", applyDelay);
+      if (!Number.isFinite(value)) {
+        return;
+      }
+
+      setPlaybackDelay(value);
+    };
+
+    applyDelay();
+    delayInput.addEventListener("input", applyDelay);
+  }
 }
 
 (function () {
@@ -143,6 +196,7 @@ document.getElementById("subscribeBtn").onclick = async () => {
       renderTrackList();
 
       updateVideoOverlay(tn);
+      setExperimentQuality(tn);
     } catch (e) {
       console.error("doSubscribe failed", e);
       subscribed = false;
@@ -564,6 +618,8 @@ async function switchTrack(ns, tn) {
   setActiveAlias(alias);
   updateVideoOverlay(tn);
 
+  setExperimentQuality(tn);
+
   activeSubscription = {
     reqId,
     alias,
@@ -623,6 +679,74 @@ async function listenDatagrams() {
   } catch (e) {
     log("warn", `Datagram reader ended: ${e.message}`);
   }
+}
+
+function readUploadLimitFromUi() {
+  const input = document.getElementById("uploadLimitInput");
+
+  if (!input) {
+    return null;
+  }
+
+  const value = Number(input.value);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return value;
+}
+
+function startMeasurement() {
+  const quality =
+    activeSubscription?.tn ??
+    document.getElementById("trackName")?.value ??
+    "unknown";
+
+  const uploadLimitMbps = readUploadLimitFromUi();
+
+  startExperiment({
+    quality,
+    uploadLimitMbps,
+  });
+
+  log(
+    "info",
+    `Measurement started quality=${quality} ` +
+      `upload=${uploadLimitMbps ?? "unlimited"} Mbps`,
+  );
+}
+
+function stopMeasurement() {
+  const summary = stopExperiment();
+
+  if (!summary) {
+    return;
+  }
+
+  console.table(summary);
+
+  log(
+    "info",
+    `RESULT quality=${summary.quality} ` +
+      `upload=${summary.uploadLimitMbps}Mbps ` +
+      `avgE2E=${summary.averageE2EMs}ms ` +
+      `avgPlayer=${summary.averagePlayerLatencyMs}ms ` +
+      `avgBuffer=${summary.averageBufferSeconds}s ` +
+      `stalls=${summary.stallCount}`,
+  );
+}
+
+function resetMeasurement() {
+  resetExperimentStats();
+}
+
+function exportMeasurement() {
+  exportExperimentCsv();
+}
+
+function printMeasurementSummary() {
+  console.table(getExperimentData());
 }
 
 async function listenStreams() {

@@ -26,6 +26,30 @@
       </div>
     </div>
 
+    <div class="measurement-controls">
+      <label for="uploadLimitInput"> Relay upload limit </label>
+
+      <input
+        id="uploadLimitInput"
+        type="number"
+        min="0"
+        step="1"
+        placeholder="Unlimited"
+      />
+
+      <span>Mbps</span>
+
+      <button id="startMeasurementBtn">Start measurement</button>
+
+      <button id="stopMeasurementBtn">Stop measurement</button>
+
+      <button id="printMeasurementBtn">Print result</button>
+
+      <button id="exportMeasurementBtn">Export CSV</button>
+
+      <button id="resetMeasurementBtn">Reset</button>
+    </div>
+
     <div class="main">
       <div class="sidebar">
         <div class="sidebar-section">
@@ -134,7 +158,9 @@
             <div>
               End to end latency: <span id="endToEndLatencyOverlay">—</span>
             </div>
-            <div>Throughput: <span id="throughputOverlay">—</span></div>
+            <div>
+              Player Transfer Rate: <span id="throughputOverlay">—</span>
+            </div>
           </div>
         </div>
         <div class="buffer-bar">
@@ -146,7 +172,7 @@
             min="1"
             max="30"
             step="1"
-            value="5"
+            value="3"
           />
 
           <label for="delayInput"> Playback delay: </label>
@@ -158,7 +184,7 @@
             step="500"
             value="0"
           />
-          <span id="delayValue">0</span>
+          <span id="delayOverlay">0</span>
         </div>
 
         <span id="bufferSizeValue">bufferSize</span>
