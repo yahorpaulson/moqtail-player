@@ -2,6 +2,7 @@ import { log } from "./logger.js";
 
 const MAX_ABR_SAMPLES = 10;
 const LATENCY_DROP_THRESHOLD_MS = 300;
+const FIXED_MEAN_WINDOW_SECONDS = 10;
 
 let experimentStartedAt = null;
 let experimentFinishedAt = null;
@@ -60,6 +61,70 @@ function getElapsedSeconds() {
 
 function isExperimentRunning() {
   return experimentStartedAt !== null && experimentFinishedAt === null;
+}
+
+/*
+ * Calculate independent, fixed latency windows:
+ * 0-10 seconds, 10-20 seconds, 20-30 seconds, etc.
+ *
+ * This is intentionally different from abrLatencyWindow, which is a moving
+ * window containing the latest samples and is used by the ABR algorithm.
+ */
+function calculateLatencyMeanBlocks() {
+  const blocks = new Map();
+  const measurementEndSeconds =
+    experimentStartedAt === null
+      ? 0
+      : ((experimentFinishedAt ?? Date.now()) - experimentStartedAt) / 1000;
+
+  for (const sample of latencySamples) {
+    const blockIndex = Math.floor(
+      sample.elapsedSeconds / FIXED_MEAN_WINDOW_SECONDS,
+    );
+
+    if (!blocks.has(blockIndex)) {
+      blocks.set(blockIndex, {
+        blockIndex,
+        startSeconds: blockIndex * FIXED_MEAN_WINDOW_SECONDS,
+        endSeconds: (blockIndex + 1) * FIXED_MEAN_WINDOW_SECONDS,
+        e2eSumMs: 0,
+        e2eSampleCount: 0,
+        playerSumMs: 0,
+        playerSampleCount: 0,
+      });
+    }
+
+    const block = blocks.get(blockIndex);
+
+    if (Number.isFinite(sample.e2eLatencyMs)) {
+      block.e2eSumMs += sample.e2eLatencyMs;
+      block.e2eSampleCount++;
+    }
+
+    if (Number.isFinite(sample.playerLatencyMs)) {
+      block.playerSumMs += sample.playerLatencyMs;
+      block.playerSampleCount++;
+    }
+  }
+
+  return [...blocks.values()]
+    .sort((first, second) => first.blockIndex - second.blockIndex)
+    .map((block) => ({
+      startSeconds: block.startSeconds,
+      endSeconds: block.endSeconds,
+      plotEndSeconds: Math.min(block.endSeconds, measurementEndSeconds),
+
+      meanE2ELatencyMs:
+        block.e2eSampleCount > 0 ? block.e2eSumMs / block.e2eSampleCount : null,
+
+      meanPlayerLatencyMs:
+        block.playerSampleCount > 0
+          ? block.playerSumMs / block.playerSampleCount
+          : null,
+
+      e2eSampleCount: block.e2eSampleCount,
+      playerSampleCount: block.playerSampleCount,
+    }));
 }
 
 /*
@@ -375,6 +440,10 @@ export function getStallEvents() {
   return [...stallEvents];
 }
 
+export function getLatencyMeanBlocks() {
+  return calculateLatencyMeanBlocks();
+}
+
 export function getExperimentData() {
   const endTime = experimentFinishedAt ?? Date.now();
 
@@ -389,6 +458,7 @@ export function getExperimentData() {
     durationSeconds: round(durationSeconds, 2),
 
     latencySamples: getLatencySamples(),
+    latencyMeanBlocks: getLatencyMeanBlocks(),
     bufferSamples: getBufferSamples(),
     stallEvents: getStallEvents(),
 
@@ -417,6 +487,12 @@ export function exportExperimentCsv() {
     "upload_limit_mbps",
     "e2e_latency_ms",
     "player_latency_ms",
+    "mean_10s_e2e_latency_ms",
+    "mean_10s_player_latency_ms",
+    "mean_block_start_seconds",
+    "mean_block_end_seconds",
+    "mean_block_e2e_samples",
+    "mean_block_player_samples",
     "e2e_latency_change_ms",
     "significant_latency_drop",
     "buffer_seconds",
@@ -440,6 +516,14 @@ export function exportExperimentCsv() {
 
       round(sample.e2eLatencyMs),
       round(sample.playerLatencyMs),
+
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+
       round(sample.e2eLatencyChangeMs),
 
       sample.significantLatencyDrop,
@@ -467,6 +551,14 @@ export function exportExperimentCsv() {
 
       null,
       null,
+
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+
       null,
       false,
 
@@ -493,6 +585,14 @@ export function exportExperimentCsv() {
 
       null,
       null,
+
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+
       null,
       false,
 
@@ -505,9 +605,48 @@ export function exportExperimentCsv() {
   }));
 
   /*
+   * Add two points for every fixed 10-second mean block. Adjacent blocks
+   * therefore have two different values at the same boundary (for example,
+   * at 10 seconds), which creates the vertical part of the staircase.
+   */
+  const meanRows = calculateLatencyMeanBlocks().flatMap((block) => {
+    const valuesAt = (elapsedSeconds) => ({
+      elapsedSeconds,
+
+      values: [
+        round(elapsedSeconds, 3),
+        "",
+        "latency_10s_mean",
+        currentQuality,
+        configuredUploadLimitMbps ?? "unlimited",
+
+        null,
+        null,
+
+        round(block.meanE2ELatencyMs),
+        round(block.meanPlayerLatencyMs),
+        block.startSeconds,
+        block.endSeconds,
+        block.e2eSampleCount,
+        block.playerSampleCount,
+
+        null,
+        false,
+        null,
+        false,
+        null,
+        null,
+        null,
+      ],
+    });
+
+    return [valuesAt(block.startSeconds), valuesAt(block.plotEndSeconds)];
+  });
+
+  /*
    * Combine all data and sort it by experiment time.
    */
-  const rows = [...latencyRows, ...bufferRows, ...stallRows]
+  const rows = [...latencyRows, ...bufferRows, ...stallRows, ...meanRows]
     .sort((first, second) => first.elapsedSeconds - second.elapsedSeconds)
     .map((row) => row.values);
 
