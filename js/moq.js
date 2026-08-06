@@ -1,9 +1,3 @@
-// ── MOQ draft-16 wire format ───────────────────────────────────────────────
-// Version: 0xff000010 (draft-16 = 0xff000000 + 16 = 0xff000010)
-// Message frame: Type(varint) + Length(16-bit big-endian) + Payload
-
-//values are defined in relay libs control constant.rs
-
 export const MSG_CLIENT_SETUP = 0x20;
 export const MSG_SERVER_SETUP = 0x21;
 export const MSG_SUBSCRIBE = 0x03;

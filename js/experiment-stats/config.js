@@ -1,0 +1,3 @@
+export const MAX_ABR_SAMPLES = 10;
+export const LATENCY_DROP_THRESHOLD_MS = 300;
+export const FIXED_MEAN_WINDOW_SECONDS = 10;

@@ -33,7 +33,7 @@ import {
   setUploadLimitMbps,
   getExperimentData,
   getRollingAverageLatency,
-} from "./statsCollector.js";
+} from "./experiment-stats.js";
 
 let transport = null;
 let ctrlWriter = null;
