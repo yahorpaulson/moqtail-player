@@ -9,16 +9,8 @@
   </head>
   <body>
     <div class="topbar">
-      <div class="logo">
-        <div class="logo-dot"></div>
-        MOQtail Player
-      </div>
-      <div
-        style="font-size: 11px; color: var(--text3); font-family: var(--mono)"
-        id="serverLabel"
-      >
-        —
-      </div>
+      <div class="logo"><div class="logo-dot"></div>MOQtail Player</div>
+      <div style="font-size: 11px; color: var(--text3); font-family: var(--mono)" id="serverLabel">—</div>
       <div class="topbar-spacer"></div>
       <div class="status-badge" id="statusBadge">
         <div class="status-dot"></div>
@@ -27,26 +19,13 @@
     </div>
 
     <div class="measurement-controls">
-      <label for="uploadLimitInput"> Relay upload limit </label>
-
-      <input
-        id="uploadLimitInput"
-        type="number"
-        min="0"
-        step="1"
-        placeholder="Unlimited"
-      />
-
+      <label for="uploadLimitInput">Relay upload limit</label>
+      <input id="uploadLimitInput" type="text" min="0" step="1" placeholder="networkTrace" />
       <span>Mbps</span>
-
       <button id="startMeasurementBtn">Start measurement</button>
-
       <button id="stopMeasurementBtn">Stop measurement</button>
-
       <button id="printMeasurementBtn">Print result</button>
-
       <button id="exportMeasurementBtn">Export CSV</button>
-
       <button id="resetMeasurementBtn">Reset</button>
     </div>
 
@@ -56,7 +35,7 @@
           <div class="section-label">Connection</div>
           <div class="field">
             <label>Server IP / hostname</label>
-            <input type="text" id="serverUrl" value="192.168.56.103" />
+            <input type="text" id="serverUrl" value="192.168.1.107" />
           </div>
           <div class="field">
             <label>Port</label>
@@ -68,67 +47,49 @@
           </div>
           <div class="btn-row" style="margin-top: 10px">
             <button class="btn primary" id="connectBtn">Connect</button>
-            <button class="btn danger" id="disconnectBtn" style="display: none">
-              Disconnect
-            </button>
+            <button class="btn danger" id="disconnectBtn" style="display: none">Disconnect</button>
           </div>
         </div>
 
         <div class="sidebar-section">
+          <div class="field" style="margin-bottom: 12px">
+            <label style="display: flex; align-items: center; gap: 8px">
+              <input id="abrEnabled" type="checkbox" checked />
+              Automatic quality (ABR)
+            </label>
+          </div>
           <div class="section-label">Track</div>
           <div class="field">
             <label>Namespace</label>
-            <input
-              type="text"
-              id="namespace"
-              value="moqtail"
-              placeholder="moqtail"
-            />
+            <input type="text" id="namespace" value="moqtail" placeholder="moqtail" />
           </div>
           <div class="field">
             <label>Track name</label>
-            <input
-              type="text"
-              id="trackName"
-              value="undefined"
-              placeholder="video"
-            />
+            <input type="text" id="trackName" value="360p" placeholder="video" />
           </div>
           <div class="field" style="margin-bottom: 10px">
             <label>Delivery mode</label>
             <div class="toggle-group">
               <button class="toggle-btn" id="modeDatagramBtn">Datagram</button>
-              <button class="toggle-btn active" id="modeStreamBtn">
-                Subgroup
-              </button>
+              <button class="toggle-btn active" id="modeStreamBtn">Subgroup</button>
             </div>
           </div>
-          <button class="btn primary" id="subscribeBtn" disabled>
-            Subscribe
-          </button>
+          <button class="btn primary" id="subscribeBtn" disabled>Subscribe</button>
         </div>
 
         <div class="sidebar-section">
           <div class="section-label">Active tracks</div>
           <div class="tracks-list" id="tracksList">
-            <div style="font-size: 12px; color: var(--text3); padding: 2px">
-              No active subscriptions
-            </div>
+            <div style="font-size: 12px; color: var(--text3); padding: 2px">No active subscriptions</div>
           </div>
         </div>
 
         <div class="sidebar-section">
           <div class="section-label">Filter log</div>
           <div class="toggle-group">
-            <button class="toggle-btn active" onclick="setFilter('all', this)">
-              All
-            </button>
-            <button class="toggle-btn" onclick="setFilter('recv', this)">
-              Data
-            </button>
-            <button class="toggle-btn" onclick="setFilter('error', this)">
-              Errors
-            </button>
+            <button class="toggle-btn active" onclick="setFilter('all', this)">All</button>
+            <button class="toggle-btn" onclick="setFilter('recv', this)">Data</button>
+            <button class="toggle-btn" onclick="setFilter('error', this)">Errors</button>
           </div>
         </div>
 
@@ -139,104 +100,42 @@
       </div>
 
       <div class="content">
-        <div
-          class="video-preview"
-          id="videoPreview"
-          style="display: flex; position: relative"
-        >
-          <video
-            id="videoPlayer"
-            controls
-            autoplay
-            style="width: 100%; border-radius: var(--radius)"
-          ></video>
-
+        <div class="video-preview" id="videoPreview" style="display: flex; position: relative">
+          <video id="videoPlayer" controls autoplay style="width: 100%; border-radius: var(--radius)"></video>
           <div id="videoTrackNameOverlay"></div>
-
           <div id="videoStatsOverlay">
             <div>Latency: <span id="latencyOverlay">—</span></div>
-            <div>
-              End to end latency: <span id="endToEndLatencyOverlay">—</span>
-            </div>
-            <div>
-              Player Transfer Rate: <span id="throughputOverlay">—</span>
-            </div>
+            <div>End to end latency: <span id="endToEndLatencyOverlay">—</span></div>
+            <div>Player Transfer Rate: <span id="throughputOverlay">—</span></div>
           </div>
         </div>
+
         <div class="buffer-bar">
-          <label for="bufferSizeInput"> Buffer size: </label>
-
-          <input
-            id="bufferSizeInput"
-            type="range"
-            min="1"
-            max="30"
-            step="1"
-            value="3"
-          />
-
-          <label for="delayInput"> Playback delay: </label>
-          <input
-            id="delayInput"
-            type="range"
-            min="0"
-            max="10000"
-            step="500"
-            value="0"
-          />
+          <label for="bufferSizeInput">Buffer size:</label>
+          <input id="bufferSizeInput" type="range" min="1" max="30" step="1" value="3" />
+          <label for="delayInput">Playback delay:</label>
+          <input id="delayInput" type="range" min="0" max="10000" step="500" value="0" />
           <span id="delayOverlay">0</span>
         </div>
 
         <span id="bufferSizeValue">bufferSize</span>
         <div class="stats-bar">
-          <div class="stat-cell">
-            <div class="stat-label">Received</div>
-            <div class="stat-value" id="statReceived">0</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-label">Gaps</div>
-            <div class="stat-value" id="statGaps">0</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-label">Errors</div>
-            <div class="stat-value" id="statErrors">0</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-label">Rate</div>
-            <div class="stat-value" id="statRate">0/s</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-label">Last group</div>
-            <div class="stat-value" id="statGroup">—</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-label">Last object</div>
-            <div class="stat-value" id="statObject">—</div>
-          </div>
+          <div class="stat-cell"><div class="stat-label">Received</div><div class="stat-value" id="statReceived">0</div></div>
+          <div class="stat-cell"><div class="stat-label">Gaps</div><div class="stat-value" id="statGaps">0</div></div>
+          <div class="stat-cell"><div class="stat-label">Errors</div><div class="stat-value" id="statErrors">0</div></div>
+          <div class="stat-cell"><div class="stat-label">Rate</div><div class="stat-value" id="statRate">0/s</div></div>
+          <div class="stat-cell"><div class="stat-label">Last group</div><div class="stat-value" id="statGroup">—</div></div>
+          <div class="stat-cell"><div class="stat-label">Last object</div><div class="stat-value" id="statObject">—</div></div>
         </div>
+
         <div class="log-area" id="logArea"></div>
         <div class="bottom-bar">
           <button class="bottom-btn" id="clearLogBtn">Clear</button>
           <button class="bottom-btn" id="pauseBtn">Pause</button>
-
           <div style="flex: 1"></div>
           <button class="bottom-btn" id="exportLogBtn">Export</button>
-          <label
-            style="
-              display: flex;
-              align-items: center;
-              gap: 6px;
-              font-size: 12px;
-              color: var(--text2);
-              cursor: pointer;
-            "
-          >
-            <input
-              type="checkbox"
-              id="autoScroll"
-              checked
-              style="accent-color: var(--accent)"
-            />
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); cursor: pointer">
+            <input type="checkbox" id="autoScroll" checked style="accent-color: var(--accent)" />
             Auto-scroll
           </label>
         </div>

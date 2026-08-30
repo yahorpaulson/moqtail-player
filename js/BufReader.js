@@ -1,4 +1,3 @@
-// ── Stream reader (control stream + uni streams) ───────────────────────────
 export class BufReader {
   constructor() {
     this.chunks = [];
