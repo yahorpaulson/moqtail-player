@@ -591,8 +591,16 @@ export function setActiveAlias(alias) {
     timelineOffset = Math.max(0, bufferedEnd - MP4_TIME_SHIFT);
 
     if (groups.length > 0) {
-      nextAppendGroup = Math.min(...groups);
-      firstGroupId = nextAppendGroup;
+      const newestGroup = Math.max(...groups);
+      for (const [key, obj] of pendingGroups) {
+        if (obj.trackAlias === alias && obj.groupId < newestGroup) {
+          pendingGroups.delete(key);
+        }
+      }
+
+      nextAppendGroup = newestGroup;
+
+      firstGroupId = newestGroup;
     } else {
       nextAppendGroup = null;
       firstGroupId = null;
