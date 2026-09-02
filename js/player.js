@@ -1,6 +1,6 @@
 import { log, clearLog, togglePause, exportLog } from "./logger.js";
 import { BufReader } from "./BufReader.js";
-import { synchronizeClock } from "./timeSynchronizer.js"
+import { synchronizeClock } from "./timeSynchronizer.js";
 
 import {
   MOQ_VERSION,
@@ -38,9 +38,12 @@ import {
   getRollingAverageLatency,
 } from "./experiment-stats.js";
 
-
 import {
   chooseQuality,
+  chooseEmergencyQuality,
+  canApplyAbrSwitch,
+  markAbrSwitchCompleted,
+  resetAbrState,
 } from "./abr.js";
 
 let transport = null;
@@ -58,16 +61,8 @@ let activeSubscription = null;
 
 //ABR
 let abrEnabled = true;
-let lastAbrSwitchTime = 0;
-const ABR_SWITCH_INTERVAL_MS = 5000;
 let abrSwitchInProgress = false;
-const CRITICAL_BUFFER_SECONDS = 0.4;
-
 let initialSubscriptionReady = false;
-
-
-
-
 
 let subscribeOkResolvers = new Map();
 let subscribed = false;
@@ -76,24 +71,21 @@ let datagramListenerStarted = false;
 
 let lastSeenByAlias = new Map();
 
-window.addEventListener("DOMContentLoaded", async() => {
-  try{
-    const timeOffset = await synchronizeClock();
-
+window.addEventListener("DOMContentLoaded", async () => {
+  try {
+    await synchronizeClock();
   } catch (error) {
-      console.error(
-        "Initial clock synchronization failed:",
-        error,
-      );
-    }  
+    console.error("Initial clock synchronization failed:", error);
+  }
 
   initPlayer();
   initBufferControls();
   initMeasurementControls();
   initAbrControls();
 
-
-  setInterval(() => {void forceDownswitch()}, 250);
+  setInterval(() => {
+    void forceDownswitch();
+  }, 250);
 });
 
 function initAbrControls() {
@@ -108,12 +100,7 @@ function initAbrControls() {
   checkbox.addEventListener("change", () => {
     abrEnabled = checkbox.checked;
 
-    log(
-      "info",
-      abrEnabled
-        ? "ABR enabled"
-        : "ABR disabled: fixed quality",
-    );
+    log("info", abrEnabled ? "ABR enabled" : "ABR disabled: fixed quality");
   });
 }
 
@@ -122,7 +109,6 @@ function initPlayer() {
 
   const mediaSource = new MediaSource();
   video.src = URL.createObjectURL(mediaSource);
-
 
   mediaSource.addEventListener("sourceopen", () => {
     const sourceBuffer = mediaSource.addSourceBuffer(
@@ -140,29 +126,21 @@ function initPlayer() {
 }
 
 function readUploadLimitFromUi() {
-  const input =
-    document.getElementById(
-      "uploadLimitInput",
-    );
+  const input = document.getElementById("uploadLimitInput");
 
   if (!input) {
     return "unlimited";
   }
 
-  const rawValue =
-    input.value.trim();
+  const rawValue = input.value.trim();
 
   if (!rawValue) {
     return "unlimited";
   }
 
-  const numericValue =
-    Number(rawValue);
+  const numericValue = Number(rawValue);
 
-  if (
-    Number.isFinite(numericValue) &&
-    numericValue > 0
-  ) {
+  if (Number.isFinite(numericValue) && numericValue > 0) {
     return numericValue;
   }
 
@@ -204,7 +182,6 @@ function initBufferControls() {
 
       setMaxBufferSeconds(value);
       bufferValue.textContent = `${value} sec`;
-
     };
 
     applyBufferSize();
@@ -514,7 +491,9 @@ function doDisconnect() {
 
 function resetUi() {
   document.getElementById("connectBtn").style.display = "";
+
   document.getElementById("disconnectBtn").style.display = "none";
+
   document.getElementById("subscribeBtn").disabled = true;
 
   setStatus("idle", "Disconnected");
@@ -529,7 +508,8 @@ function resetUi() {
   activeSubscription = null;
   initialSubscriptionReady = false;
   abrSwitchInProgress = false;
-  lastAbrSwitchTime = 0;
+
+  resetAbrState();
   subscribeOkResolvers.clear();
 
   renderTrackList();
@@ -588,7 +568,7 @@ async function doSubscribe(ns, tn, makeActive = true) {
       tn,
       alias: null,
       live: false,
-      mode
+      mode,
     };
     renderTrackList();
   }
@@ -624,9 +604,6 @@ async function doSubscribe(ns, tn, makeActive = true) {
     return null;
   }
 
-
-  
-
   if (makeActive) {
     await waitForFirstSegment(alias);
     setActiveAlias(alias);
@@ -637,16 +614,48 @@ async function doSubscribe(ns, tn, makeActive = true) {
       ns,
       tn,
       live: true,
-      mode
+      mode,
     };
 
     initialSubscriptionReady = true;
 
     renderTrackList();
-
   }
 
   return { reqId, alias };
+}
+
+async function forceDownswitch() {
+  if (
+    !abrEnabled ||
+    !initialSubscriptionReady ||
+    abrSwitchInProgress ||
+    !activeSubscription
+  ) {
+    return;
+  }
+
+  const bufferSeconds = getCurrentBufferSeconds();
+
+  const currentQuality = activeSubscription.tn;
+
+  const selectedQuality = chooseEmergencyQuality({
+    bufferSeconds,
+    currentQuality,
+  });
+
+  if (!selectedQuality) {
+    return;
+  }
+
+  log(
+    "warn",
+    `Emergency downswitch ` +
+      `${currentQuality} -> ${selectedQuality} ` +
+      `buffer=${bufferSeconds.toFixed(2)}s`,
+  );
+
+  await performAbrSwitch(selectedQuality);
 }
 
 export async function doUnsubscribe(reqId) {
@@ -672,7 +681,10 @@ async function switchTrack(ns, tn) {
   log("info", `switchTrack started ns="${ns}" track="${tn}"`);
 
   const result = await doSubscribe(ns, tn, false);
-  if (!result) return;
+
+  if (!result) {
+    throw new Error(`Subscription failed for ${tn}`);
+  }
 
   const { reqId, alias } = result;
 
@@ -691,11 +703,10 @@ async function switchTrack(ns, tn) {
     tn,
     alias,
     live: true,
-    mode
+    mode,
   };
-    
-  renderTrackList();
 
+  renderTrackList();
 
   if (oldSubscription && oldSubscription.reqId !== reqId) {
     await doUnsubscribe(oldSubscription.reqId);
@@ -745,8 +756,6 @@ async function listenDatagrams() {
   }
 }
 
-
-
 function startMeasurement() {
   const quality =
     activeSubscription?.tn ??
@@ -789,6 +798,7 @@ function stopMeasurement() {
 
 function resetMeasurement() {
   resetExperimentStats();
+  resetAbrState();
 }
 
 function exportMeasurement() {
@@ -810,7 +820,6 @@ async function listenStreams() {
 
       if (done) break;
 
-
       handleSubgroupStream(stream).catch((e) => {
         log("error", `Subgroup stream failed: ${e.message}`);
       });
@@ -821,7 +830,6 @@ async function listenStreams() {
 }
 
 async function handleSubgroupStream(stream) {
-
   const recvStart = performance.now();
 
   const sr = new BufReader();
@@ -836,7 +844,6 @@ async function handleSubgroupStream(stream) {
 
   const objectIdDelta = await sr.readVarint();
   const extLen = await sr.readVarint();
-  
 
   if (extLen > 0) {
     await sr.readBytes(extLen);
@@ -846,7 +853,8 @@ async function handleSubgroupStream(stream) {
   const payload = await sr.readBytes(payloadLen);
   const recvEnd = performance.now();
   const receiveTimeMs = recvEnd - recvStart;
-  const throughputMbps = receiveTimeMs > 0? (payloadLen * 8) / (receiveTimeMs * 1000): 0;
+  const throughputMbps =
+    receiveTimeMs > 0 ? (payloadLen * 8) / (receiveTimeMs * 1000) : 0;
 
   updateThroughputOverlay(throughputMbps);
 
@@ -861,8 +869,7 @@ async function handleSubgroupStream(stream) {
     publishTimestamp,
   );
 
-  const isActiveTrack =
-    trackAlias === activeSubscription?.alias;
+  const isActiveTrack = trackAlias === activeSubscription?.alias;
 
   if (
     abrEnabled &&
@@ -880,16 +887,9 @@ async function handleSubgroupStream(stream) {
       currentQuality,
     });
 
-    if (
-      selectedQuality &&
-      selectedQuality !== currentQuality &&
-      Date.now() - lastAbrSwitchTime >= ABR_SWITCH_INTERVAL_MS
+    if (selectedQuality && selectedQuality !== currentQuality
     ) {
-      log(
-        "info",
-        `ABR decision ${currentQuality} -> ${selectedQuality}`,
-      );
-
+      log("info", `ABR decision ${currentQuality} -> ${selectedQuality}`);
       void performAbrSwitch(selectedQuality);
     }
   }
@@ -909,6 +909,7 @@ async function performAbrSwitch(selectedQuality) {
   }
 
   const namespace = activeSubscription.ns;
+
   const oldQuality = activeSubscription.tn;
 
   abrSwitchInProgress = true;
@@ -916,61 +917,18 @@ async function performAbrSwitch(selectedQuality) {
   try {
     await switchTrack(namespace, selectedQuality);
 
-    lastAbrSwitchTime = Date.now();
+    markAbrSwitchCompleted();
 
     log(
       "info",
-      `ABR switch completed ${oldQuality} -> ${selectedQuality}`,
+      `ABR switch completed ` + `${oldQuality} -> ${selectedQuality}`,
     );
   } catch (error) {
-    log(
-      "error",
-      `ABR switch failed: ${error.message}`,
-    );
+    log("error", `ABR switch failed: ${error.message}`);
   } finally {
     abrSwitchInProgress = false;
   }
 }
-
-async function forceDownswitch() {
-  if (!abrEnabled || !initialSubscriptionReady) {
-    return;
-  }
-
-  if (abrSwitchInProgress) {
-    return;
-  }
-
-  const currentQuality =
-    activeSubscription?.tn;
-
-  if (
-    !currentQuality ||
-    currentQuality === "360p"
-  ) {
-    return;
-  }
-
-  const bufferSeconds =
-    getCurrentBufferSeconds();
-
-  if (bufferSeconds < 0.3) {
-    return "360p";
-  }
-
-  if (bufferSeconds < CRITICAL_BUFFER_SECONDS) {
-    return REPRESENTATIONS[Math.max(0, currentIndex - 1)].name;
-  }
-
-  log(
-    "warn",
-    `Emergency downswitch ${currentQuality} -> 360p ` +
-      `buffer=${bufferSeconds.toFixed(2)}s`,
-  );
-
-  await performAbrSwitch("360p");
-}
-
 
 function readU64BE(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);

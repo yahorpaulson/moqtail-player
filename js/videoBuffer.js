@@ -1,7 +1,5 @@
 import { log } from "./logger.js";
-import {
-  relayClockOffsetMs,
-} from "./timeSynchronizer.js";
+import { relayClockOffsetMs } from "./timeSynchronizer.js";
 import {
   addLatencySample,
   addBufferSample,
@@ -33,7 +31,7 @@ let waitingAlias = null;
 let timelineOffset = 0;
 
 let missingGroupSince = null;
-const GAP_WAIT_MS = 200;
+const GAP_WAIT_MS = 1000;
 const SEGMENT_DURATION_SECONDS = 1;
 let missingGroupTimer = null;
 
@@ -75,8 +73,8 @@ export function initVideoBuffer(ctx) {
       return;
     }
 
-    // keep disabled 
-    //trimOldBuffer();
+    // keep disabled
+    trimOldBuffer();
 
     logBufferedRangesDetailed();
 
@@ -106,6 +104,18 @@ export function initVideoBuffer(ctx) {
     endStall();
 
     log("info", `VIDEO playing currentTime=${video.currentTime.toFixed(3)}`);
+  });
+
+  video.addEventListener("error", () => {
+    const error = video.error;
+
+    log(
+      "error",
+      `VIDEO ERROR code=${error?.code ?? "unknown"} ` +
+        `message=${error?.message ?? "unknown"}`,
+    );
+
+    mseReady = false;
   });
 
   video.addEventListener("stalled", () => {
@@ -146,7 +156,6 @@ function maybeStartPlayback() {
   const buffered = end - start;
 
   if (buffered < START_BUFFER_SECONDS) {
-    
     return;
   }
 
@@ -157,8 +166,6 @@ function maybeStartPlayback() {
   });
 
   playbackStarted = true;
-
-  
 }
 
 function logBufferedRangesDetailed() {
@@ -173,8 +180,6 @@ function logBufferedRangesDetailed() {
     const start = video.buffered.start(i);
     const end = video.buffered.end(i);
     const ahead = end - video.currentTime;
-
-    
   }
 }
 
@@ -222,10 +227,7 @@ function checkPlaybackLatency() {
       continue;
     }
 
-    if (
-      currentMarker === null ||
-      marker.offset > currentMarker.offset
-    ) {
+    if (currentMarker === null || marker.offset > currentMarker.offset) {
       currentMarkerKey = markerKey;
       currentMarker = marker;
     }
@@ -250,8 +252,6 @@ function checkPlaybackLatency() {
       playerLatencyMs: playerLatency,
     });
   }
-
-  
 
   /*
    * Older markers can no longer describe the current playback position.
@@ -279,10 +279,7 @@ function getContiguousBufferAhead() {
     const start = video.buffered.start(i);
     const end = video.buffered.end(i);
 
-    if (
-      currentTime >= start - tolerance &&
-      currentTime <= end + tolerance
-    ) {
+    if (currentTime >= start - tolerance && currentTime <= end + tolerance) {
       return Math.max(0, end - currentTime);
     }
   }
@@ -331,31 +328,22 @@ export function handlePayload(
   payload,
   publishTimestamp,
 ) {
-
   if (activeAlias === null) {
     activeAlias = trackAlias;
-    
   }
-
 
   if (trackAlias !== activeAlias && trackAlias !== waitingAlias) {
-    
     return;
   }
-
-
 
   const receiveTimeMonotonic = performance.now();
   const receiveTimestamp = Date.now();
 
   const rawE2ELatency =
-    receiveTimestamp - publishTimestamp +
-    relayClockOffsetMs;
+    receiveTimestamp - publishTimestamp + relayClockOffsetMs;
 
   latestObjectE2ELatency =
-    receiveTimestamp +
-    relayClockOffsetMs -
-    publishTimestamp;
+    receiveTimestamp + relayClockOffsetMs - publishTimestamp;
 
   log(
     "debug",
@@ -366,22 +354,16 @@ export function handlePayload(
 
   updateEndToEndLatencyOverlay(latestObjectE2ELatency);
 
-  const arrivalMetrics =
-  calculateInterArrival(receiveTimeMonotonic);
+  const arrivalMetrics = calculateInterArrival(receiveTimeMonotonic);
 
-  
   if (arrivalMetrics !== null) {
     addInterArrivalSample({
       groupId,
       trackAlias,
       interArrivalMs: arrivalMetrics.interArrivalMs,
-      smoothedInterArrivalMs:
-        arrivalMetrics.smoothedInterArrivalMs,
+      smoothedInterArrivalMs: arrivalMetrics.smoothedInterArrivalMs,
     });
-
-    
   }
-  
 
   pendingGroups.set(`${trackAlias}:${groupId}`, {
     trackAlias,
@@ -390,15 +372,11 @@ export function handlePayload(
     payload,
     publishTimestamp: publishTimestamp ?? receiveTimestamp,
     receiveTimestamp,
-    interArrivalMs:
-      arrivalMetrics?.interArrivalMs ?? null,
-    smoothedInterArrivalMs:
-      arrivalMetrics?.smoothedInterArrivalMs ?? null,
+    interArrivalMs: arrivalMetrics?.interArrivalMs ?? null,
+    smoothedInterArrivalMs: arrivalMetrics?.smoothedInterArrivalMs ?? null,
   });
 
   //trimPendingGroups();
-
-  
 
   if (firstSegmentResolvers.has(trackAlias)) {
     log("info", `First segment arrived for alias=${trackAlias}`);
@@ -421,7 +399,6 @@ export function handlePayload(
     );
   }
 
-  
   appendNextSegment();
 }
 
@@ -429,6 +406,14 @@ export function waitForFirstSegment(alias) {
   waitingAlias = alias;
 
   log("info", `waitForFirstSegment alias=${alias}`);
+
+  const segmentAlreadyAvailable = [...pendingGroups.values()].some(
+    (segment) => segment.trackAlias === alias,
+  );
+
+  if (segmentAlreadyAvailable) {
+    return Promise.resolve();
+  }
 
   return new Promise((resolve) => {
     firstSegmentResolvers.set(alias, resolve);
@@ -467,7 +452,6 @@ export function appendNextSegment() {
     clearTimeout(missingGroupTimer);
     missingGroupTimer = null;
   }
-  pendingGroups.delete(key);
 
   try {
     const segmentIndex = next.groupId - firstGroupId;
@@ -477,6 +461,10 @@ export function appendNextSegment() {
 
     sourceBuffer.timestampOffset = offset;
 
+    sourceBuffer.appendBuffer(next.payload);
+
+    pendingGroups.delete(key);
+
     playbackMarkers.set(markerKey, {
       groupId: next.groupId,
       trackAlias: next.trackAlias,
@@ -484,10 +472,6 @@ export function appendNextSegment() {
       publishTimestamp: next.publishTimestamp,
       receiveTimestamp: next.receiveTimestamp,
     });
-
-    
-
-    sourceBuffer.appendBuffer(next.payload);
 
     nextAppendGroup++;
   } catch (e) {
@@ -576,15 +560,11 @@ function handleMissingGroup() {
       return;
     }
 
-   
     return;
   }
-
-  
 }
 
 export function setActiveAlias(alias) {
-  
   if (!video) return;
 
   const switchingToNewAlias = activeAlias !== alias;
